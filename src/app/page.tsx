@@ -5,7 +5,6 @@ import { useRouter } from '@/components/tenx/useRouter'
 import { LandingPage } from '@/components/tenx/LandingPage'
 import { DashboardPage } from '@/components/tenx/DashboardPage'
 import { GlobalConfigPage } from '@/components/tenx/GlobalConfigPage'
-import { StatusRotatorPage } from '@/components/tenx/StatusRotatorPage'
 import { OAuthConsentPage } from '@/components/tenx/OAuthConsentPage'
 import { AdminPage } from '@/components/tenx/AdminPage'
 import { ProfilePage } from '@/components/tenx/ProfilePage'
@@ -40,8 +39,6 @@ export default function Home() {
       />
     )
   }
-  if (route.name === 'rotator') {
-    return <StatusRotatorPage initial={me || undefined} />
-  }
+
   return <LandingPage />
 }

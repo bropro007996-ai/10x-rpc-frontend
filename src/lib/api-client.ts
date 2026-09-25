@@ -32,13 +32,9 @@ export interface Me {
   globalConfig?: {
     city: string | null
     timezone: string
-    rotatorEnabled: boolean
-    rotatorIntervalMins: number
   } | null
   rpcConfig?: RpcConfig | null
   gameRpcConfig?: GameRpcConfig | null
-  rotatorPresets?: RotatorPreset[]
-  rotatorEnabled?: boolean
   app?: { name: string; tagline: string }
   subscription?: {
     active: boolean
@@ -74,15 +70,6 @@ export interface RpcConfig {
   startMinsAgo?: number
   endTotalMins?: number | null
   enabled?: boolean
-}
-
-export interface RotatorPreset {
-  id?: string
-  emoji?: string | null
-  text: string
-  durationMins?: number
-  enabled?: boolean
-  order?: number
 }
 
 // ===== Games RPC (completely separate from Normal RPC) =====
@@ -154,7 +141,6 @@ export interface AdminUser {
   globalConfig: {
     city: string | null
     timezone: string
-    rotatorEnabled: boolean
   } | null
   isAdmin: boolean
 }
@@ -505,16 +491,6 @@ export const api = {
     '/api/config/save', { method: 'POST', body: JSON.stringify({ city, timezone }) }
   ),
   configAutoDetect: () => fetchJson<{ ok: boolean }>('/api/config/auto-detect', { method: 'POST' }),
-
-  rotatorList: () => fetchJson<{ presets: RotatorPreset[] }>('/api/rotator/list'),
-  rotatorSave: (data: RotatorPreset) => fetchJson<{ ok: boolean; preset: RotatorPreset }>(
-    '/api/rotator/save', { method: 'POST', body: JSON.stringify(data) }
-  ),
-  rotatorDelete: (id: string) => fetchJson<{ ok: boolean }>(`/api/rotator/save?id=${id}`, { method: 'DELETE' }),
-  rotatorToggle: (enabled: boolean, intervalMins?: number) =>
-    fetchJson<{ ok: boolean }>('/api/rotator/toggle', {
-      method: 'POST', body: JSON.stringify({ enabled, intervalMins }),
-    }),
 
   sleepTimer: (hours: number | null) => fetchJson<{ ok: boolean; active?: boolean; endsAt?: string }>(
     '/api/sleep-timer', { method: 'POST', body: JSON.stringify({ hours }) }

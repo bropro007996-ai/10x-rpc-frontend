@@ -16,7 +16,6 @@ const DEFAULT_FLAGS = [
   { key: 'disable_new_signups',    label: 'Disable New Signups',       description: 'Block new Discord OAuth registrations', category: 'general',  enabled: false },
   { key: 'disable_demo_login',     label: 'Disable Demo Login',         description: 'Block the demo-mode login button', category: 'general',  enabled: false },
   { key: 'disable_payments',       label: 'Disable Payments',           description: 'Block new subscription purchases', category: 'payments', enabled: false },
-  { key: 'disable_status_rotator', label: 'Disable Status Rotator',     description: 'Pause all status rotator timers globally', category: 'rpc',      enabled: false },
   { key: 'force_rpc_for_all',      label: 'Force RPC for All',          description: 'Enable RPC for every user regardless of trial status', category: 'rpc', enabled: false },
   { key: 'beta_features',          label: 'Beta Features',              description: 'Enable experimental features for all users', category: 'beta', enabled: false },
   { key: 'beta_games_rpc',         label: 'Beta: Games RPC',             description: 'Show the Games RPC tab to all users', category: 'beta', enabled: true },

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from './useRouter'
 import {
-  Home, LayoutDashboard, User, Settings, RotateCw, Shield, Activity,
+  Home, LayoutDashboard, User, Settings, Shield, Activity,
   Receipt, LogOut, Menu, X, Server, Bell, CreditCard, Crown, Gamepad2,
   Clock, Zap, RefreshCw, ExternalLink, HelpCircle
 } from 'lucide-react'
@@ -30,7 +30,6 @@ export function NavMenu({ isAdmin, onLogout }: NavMenuProps) {
       title: 'RPC',
       items: [
         { label: 'Settings', icon: Settings, route: { name: 'config' as const } },
-        { label: 'Status Rotator', icon: RotateCw, route: { name: 'rotator' as const } },
       ],
     },
     {

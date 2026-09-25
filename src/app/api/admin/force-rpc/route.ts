@@ -3,7 +3,7 @@
 //   1. Finds all users with active sessions + Discord tokens
 //   2. Enables RPC for each
 //   3. Sends presence via Gaming SDK gateway
-//   4. Also runs the rotator tick + sleep timer check
+//   4. Also runs the sleep timer check
 //   5. Returns summary
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Also run rotator tick + sleep timer check
+  // Also run sleep timer check
   // (inline, not via HTTP — to avoid timeout)
 
   return NextResponse.json({

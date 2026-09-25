@@ -70,7 +70,6 @@ export async function GET() {
       globalConfig: u.globalConfig ? {
         city: u.globalConfig.city,
         timezone: u.globalConfig.timezone,
-        rotatorEnabled: u.globalConfig.rotatorEnabled,
       } : null,
       isAdmin: isAdmin(u.discordId),
     }

@@ -208,7 +208,6 @@ export function ProfilePage({ initial }: { initial?: Me }) {
         <div className="grid grid-cols-2 gap-2">
           <PrimaryButton onClick={() => navigate({ name: 'dashboard' })} className="text-xs">← Dashboard</PrimaryButton>
           <GhostButton onClick={() => navigate({ name: 'config' })} className="text-xs">⚙️ Settings</GhostButton>
-          <GhostButton onClick={() => navigate({ name: 'rotator' })} className="text-xs">🔄 Rotator</GhostButton>
           {me.user?.discordId === '824940038617694279' || me.user?.discordId === '1526539220586467351' ? (
             <GhostButton onClick={() => navigate({ name: 'admin' })} className="text-xs">🔧 Admin</GhostButton>
           ) : null}

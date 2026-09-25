@@ -20,19 +20,14 @@ export async function GET() {
     let globalConfig: any = null
     let rpcConfig: any = null
     let gameRpcConfig: any = null
-    let rotatorPresets: any[] = []
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        [trial, globalConfig, rpcConfig, gameRpcConfig, rotatorPresets] = await Promise.all([
+        [trial, globalConfig, rpcConfig, gameRpcConfig] = await Promise.all([
           db.trial.findUnique({ where: { userId: session.userId } }),
           db.globalConfig.findUnique({ where: { userId: session.userId } }),
           db.rpcConfig.findFirst({ where: { userId: session.userId } }),
           db.gameRpcConfig.findUnique({ where: { userId: session.userId } }),
-          db.rotatorPreset.findMany({
-            where: { userId: session.userId },
-            orderBy: { order: 'asc' },
-          }),
         ])
         if (!rpcConfig) {
           rpcConfig = await db.rpcConfig.create({
@@ -115,8 +110,6 @@ export async function GET() {
     globalConfig: globalConfig ? {
       city: globalConfig.city,
       timezone: globalConfig.timezone,
-      rotatorEnabled: globalConfig.rotatorEnabled,
-      rotatorIntervalMins: globalConfig.rotatorIntervalMins,
     } : null,
     rpcConfig: rpcConfig ? {
       id: rpcConfig.id,
@@ -160,15 +153,6 @@ export async function GET() {
       startMinsAgo: gameRpcConfig.startMinsAgo,
       endTotalMins: gameRpcConfig.endTotalMins,
     } : null,
-    rotatorPresets: rotatorPresets.map(p => ({
-      id: p.id,
-      emoji: p.emoji,
-      text: p.text,
-      durationMins: p.durationMins,
-      enabled: p.enabled,
-      order: p.order,
-    })),
-    rotatorEnabled: globalConfig?.rotatorEnabled ?? false,
     app: {
       name: CONFIG.app.name,
       tagline: CONFIG.app.tagline,

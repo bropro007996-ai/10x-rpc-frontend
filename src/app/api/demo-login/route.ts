@@ -54,14 +54,6 @@ export async function POST() {
         endTotalMins: 30,
       },
     })
-    // Seed a couple of rotator presets
-    await db.rotatorPreset.createMany({
-      data: [
-        { userId: user.id, emoji: '🎮', text: 'Playing something', durationMins: 5, order: 0 },
-        { userId: user.id, emoji: '💻', text: 'Coding the future', durationMins: 5, order: 1 },
-        { userId: user.id, emoji: '☕', text: 'Coffee break', durationMins: 5, order: 2 },
-      ],
-    })
   }
 
   // Create session — setSessionCookie() also tries to set the cookie on Render's
