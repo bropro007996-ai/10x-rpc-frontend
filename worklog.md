@@ -1743,3 +1743,92 @@ Verification:
 - Production / → HTTP 200 ✓
 - Production /admin HTML renders (16KB mobile, no hydration errors) ✓
 - Local dev works ✓
+
+---
+Task ID: dynamic-subscription-system-1
+Agent: Z.ai Code (main)
+Task: Build production-ready dynamic subscription management system
+
+Work Log:
+- Extended Prisma Plan model with 8 new fields:
+  * originalPriceInr (MRP — crossed out when offer active)
+  * offerPriceInr (discounted sale price)
+  * offerTag (short tag e.g. "LIMITED TIME")
+  * offerText (longer offer description)
+  * offerStartsAt + offerEndsAt (offer validity window)
+  * isArchived (soft-delete flag — preserves data + subscriber references)
+  * Both SQLite + Postgres schemas updated
+- Created src/lib/pricing.ts — single source of truth for pricing:
+  * calculatePlanPricing() — computes effective price + offer state + discount %
+  * getEffectivePlanPrice() — fetches plan from DB, returns computed pricing
+  * validatePlanOfferFields() — server-side validation (offer price <= original, start < end)
+- Updated /api/plans endpoints (full CRUD):
+  * GET (public): returns active plans with computed pricing + offer state
+  * GET ?all=true (admin): returns ALL plans including archived
+  * POST (admin): create plan with all offer fields + validation
+  * PUT (admin): update plan — existing subscribers NOT affected
+  * DELETE (admin): soft-delete (archive) by default; hard delete only if no subscribers
+- Updated /api/subscription/razorpay/create-order:
+  * Reads price from DB via getEffectivePlanPrice() — frontend NEVER sends amount
+  * Creates Payment record (status: created) before Razorpay order
+  * Links Razorpay order ID to Payment record
+- Updated /api/subscription/razorpay/verify:
+  * Re-validates via DB Payment record + Razorpay signature
+  * Updates Payment to status: verified
+  * Uses DB-verified amount (not frontend)
+- Updated /api/subscription/status:
+  * Fetches plans from DB + computes pricing (no more hardcoded PLANS)
+- Updated /api/admin/stats:
+  * Fetches plans from DB instead of hardcoded PLANS array
+- Updated /api/subscription/create:
+  * Awaits getPlan() (now async, reads from DB)
+- Removed hardcoded PLANS array from src/lib/subscription.ts:
+  * getPlan() is now async, reads from DB
+  * activatePlan() reads plan from DB, extends existing subscription
+  * Existing subscribers NOT modified when plan prices change
+- Updated /api/trial endpoint (30-day one-time free trial):
+  * GET: returns trial status (canStartTrial, daysLeft, usedBefore)
+  * POST: start new trial (fails if one already exists — one-time enforcement)
+  * State stored in DB Trial table (not localStorage) — persists across devices
+- Added startTrial() to subscription.ts:
+  * Checks for existing Trial row
+  * If trial exists + expired → returns error (cannot re-use)
+  * If trial exists + active → returns current endsAt
+  * If no trial → creates new 30-day trial
+- Rewrote admin PlansTab.tsx (fully):
+  * Create/edit form: base price, original/MRP, offer price, offer tag, offer text, offer start/end dates
+  * Live discount preview while editing
+  * Plan list: effective price, crossed-out original, discount %, offer tag, offer text
+  * Summary: total / active / on-offer / archived counts
+  * Archive button (soft-delete) instead of hard delete
+  * Toggle active/inactive + popular/recommended
+  * Trial info card
+- Rewrote SubscriptionPanel.tsx (frontend):
+  * Fetches plans from /api/plans (dynamic, DB-driven)
+  * Shows crossed-out original price ONLY when offer is active
+  * Shows discount % badge + offer tag + offer text
+  * Trial CTA shown only when canStartTrial=true (backend-controlled)
+  * Razorpay checkout uses amount from backend (never frontend)
+- Updated api-client.ts:
+  * Added PlanPricing interface
+  * Extended AdminPlan interface with offer fields + computed pricing
+  * Added publicPlans(), startTrial(), getTrialStatus() methods
+  * Updated adminCreatePlan/adminUpdatePlan/adminDeletePlan to accept new fields
+- Fixed Prisma @default(null) error (not allowed on nullable fields — the ? alone makes them nullable)
+- Pushed schema to Neon Postgres (all new fields created)
+- Committed (628cc30) + deployed to Vercel + pushed to GitHub
+
+Verification:
+- ESLint: 0 errors, 0 warnings ✓
+- Production / → HTTP 200 ✓
+- Production /admin → HTTP 200 ✓
+- Production /dashboard → HTTP 200 ✓
+- /api/plans returns 2 active plans from DB with computed pricing ✓
+- /api/trial returns 401 unauth (correct) ✓
+- /api/plans?all=true returns 401 unauth (admin-only, correct) ✓
+- Admin create plan with offer: created with effectivePrice=₹49, originalPrice=₹199, discount=75% ✓
+- Validation: offer price > original → HTTP 400 with error ✓
+- Trial one-time enforcement: POST /api/trial when trial exists → HTTP 409 ✓
+- Archive (soft-delete): plan archived, not hard-deleted ✓
+- Neon Postgres schema synced with all new fields ✓
+- Local dev server works ✓
