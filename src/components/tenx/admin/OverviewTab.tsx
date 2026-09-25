@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { api, type AdminUser } from '@/lib/api-client'
-import { AdminCard, AdminSectionTitle, AdminStatPill, AdminEmptyState } from './shared'
+import { AdminCard, AdminSectionTitle, AdminStatPill, AdminEmptyState, formatMoney } from './shared'
 import {
-  Activity, Users, DollarSign, Crown, BarChart3, Server, Power, LayoutGrid, Zap
+  Activity, Users, IndianRupee, Crown, BarChart3, Server, Power, LayoutGrid, Zap
 } from 'lucide-react'
 
 interface DaemonInfo {
@@ -151,7 +151,7 @@ export function OverviewTab({ refreshKey }: OverviewTabProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <AdminStatPill label="Total Users" value={users.length} color="text-purple-300" />
         <AdminStatPill label="Active RPC" value={activeRpcCount} color="text-green-400" />
-        <AdminStatPill label="Revenue" value={`$${stats?.totalRevenue ?? 0}`} color="text-amber-400" />
+        <AdminStatPill label="Revenue" value={formatMoney(stats?.totalRevenue ?? 0)} color="text-amber-400" />
         <AdminStatPill label="Subs" value={stats?.activeSubscriptions ?? 0} color="text-blue-400" />
       </div>
 

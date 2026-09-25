@@ -7,7 +7,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { BarChart3, TrendingUp, DollarSign, Users, Bell, Activity, Crown, Star } from 'lucide-react'
+import { BarChart3, TrendingUp, IndianRupee, Users, Bell, Activity, Crown, Star } from 'lucide-react'
 
 const PLAN_COLORS = ['#a855f7', '#3b82f6', '#f59e0b', '#f97316', '#10b981', '#ec4899', '#6b7280']
 const STATUS_COLORS: Record<string, string> = {
@@ -77,7 +77,7 @@ export function AnalyticsTab({ refreshKey }: AnalyticsTabProps) {
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <Kpi icon={<Users className="w-3.5 h-3.5" />} label="Total Users" value={data.summary.totalUsers} color="text-purple-300" />
         <Kpi icon={<TrendingUp className="w-3.5 h-3.5" />} label={`Signups (${days}d)`} value={totalSignups} color="text-green-400" />
-        <Kpi icon={<DollarSign className="w-3.5 h-3.5" />} label="Revenue (all)" value={formatMoney(data.summary.totalRevenue)} color="text-amber-400" />
+        <Kpi icon={<IndianRupee className="w-3.5 h-3.5" />} label="Revenue (all)" value={formatMoney(data.summary.totalRevenue)} color="text-amber-400" />
         <Kpi icon={<Crown className="w-3.5 h-3.5" />} label="Active Subs" value={data.summary.activeSubs} color="text-blue-400" />
         <Kpi icon={<Bell className="w-3.5 h-3.5" />} label={`Notifs (${days}d)`} value={totalNotifs} color="text-pink-400" />
       </div>
@@ -115,7 +115,7 @@ export function AnalyticsTab({ refreshKey }: AnalyticsTabProps) {
 
       {/* Revenue chart */}
       <AdminCard>
-        <AdminSectionTitle icon={<DollarSign className="w-4 h-4" />}>
+        <AdminSectionTitle icon={<IndianRupee className="w-4 h-4" />}>
           Revenue — Last {days} days
         </AdminSectionTitle>
         {totalRevenue === 0 ? (

@@ -108,9 +108,9 @@ export function useAdminFetch<T>(
   }
 }
 
-export function formatMoney(amount: number, currency: string = 'usd'): string {
-  const symbol = currency.toLowerCase() === 'usd' ? '$' : currency.toUpperCase() + ' '
-  return `${symbol}${(amount / 100).toFixed(2)}`
+export function formatMoney(amount: number, currency: string = 'inr'): string {
+  const symbol = currency.toLowerCase() === 'inr' ? '₹' : currency.toUpperCase() + ' '
+  return `${symbol}${(amount / 100).toFixed(0)}`
 }
 
 export function formatDateTime(iso: string): string {

@@ -71,7 +71,7 @@ export async function POST(req: Request) {
         plan: planId,
         status: 'active',
         amountPaid: 0,
-        currency: 'usd',
+        currency: 'inr',
         startsAt: now,
         endsAt: finalEndsAt,
         autoRenew: false,

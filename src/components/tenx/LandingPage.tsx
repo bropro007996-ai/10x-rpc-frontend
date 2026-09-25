@@ -117,7 +117,7 @@ export function LandingPage() {
             {/* Trial */}
             <PricingCard
               name="Trial"
-              price="$0"
+              price="₹0"
               period="/ 30 Days"
               features={['Full feature access', '30 Days validity']}
               cta="Try Now"
@@ -128,8 +128,8 @@ export function LandingPage() {
             {/* Pro (3 Months) */}
             <PricingCard
               name="Pro (3 Months)"
-              price="$4"
-              originalPrice="$5"
+              price="₹399"
+              originalPrice="₹499"
               period="/ 3 Mo"
               badge="20% OFF"
               features={['Full feature Access', 'Priority Support', 'Game RPC Requests', 'Custom discord role']}
@@ -142,7 +142,7 @@ export function LandingPage() {
             {/* Plus (1 Month) */}
             <PricingCard
               name="Plus (1 Month)"
-              price="$2"
+              price="₹199"
               period="/ 1 Mo"
               features={['Full feature access', 'Standard Support', 'Basic discord role']}
               cta="Buy Now"
