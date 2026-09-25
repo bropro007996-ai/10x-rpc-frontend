@@ -281,13 +281,13 @@ model Plan {
   slug            String    @unique
   // Pricing — all in INR paise (1 INR = 100 paise)
   priceInr        Int       @default(0)  // base/selling price (kept for backward compat)
-  originalPriceInr Int? // MRP — shown crossed out when offer active
-  offerPriceInr   Int? // discounted sale price (if null, uses priceInr)
+  originalPriceInr Int?      @default(null) // MRP — shown crossed out when offer active
+  offerPriceInr   Int?      @default(null) // discounted sale price (if null, uses priceInr)
   // Offer metadata
-  offerTag        String? // short tag e.g. "LIMITED TIME", "EARLY BIRD"
-  offerText       String? // longer offer description
-  offerStartsAt   DateTime? // when offer becomes active
-  offerEndsAt     DateTime?  // when offer expires
+  offerTag        String?   @default(null) // short tag e.g. "LIMITED TIME", "EARLY BIRD"
+  offerText       String?   @default(null) // longer offer description
+  offerStartsAt   DateTime? @default(null) // when offer becomes active
+  offerEndsAt     DateTime? @default(null)  // when offer expires
   // Plan config
   durationDays    Int
   description     String?

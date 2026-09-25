@@ -282,7 +282,7 @@ model Plan {
   name            String
   slug            String    @unique
   priceInr        Int       @default(0)
-  originalPriceInr Int?     @default(null)
+  originalPriceInr Int?
   offerPriceInr   Int?
   offerTag        String?
   offerText       String?
