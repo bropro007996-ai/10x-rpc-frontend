@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
-import { PLANS } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,12 +17,13 @@ export async function GET() {
 
   const now = new Date()
 
-  const [totalUsers, activeSubs, allSubs, trialUsers, expiredSubs] = await Promise.all([
+  const [totalUsers, activeSubs, allSubs, trialUsers, expiredSubs, dbPlans] = await Promise.all([
     db.user.count(),
     db.subscription.count({ where: { status: 'active', endsAt: { gt: now } } }),
     db.subscription.findMany({ where: { status: 'active', endsAt: { gt: now } }, select: { plan: true, amountPaid: true } }),
     db.trial.count({ where: { active: true, endsAt: { gt: now } } }),
     db.subscription.count({ where: { status: { in: ['expired', 'cancelled'] } } }),
+    db.plan.findMany({ where: { isArchived: false }, orderBy: { displayOrder: 'asc' } }),
   ])
 
   const planBreakdown: Record<string, number> = {}
@@ -44,7 +44,12 @@ export async function GET() {
       trialUsers,
       expiredSubs,
       planBreakdown,
-      plans: PLANS.filter(p => p.id !== 'trial'),
+      plans: dbPlans.map(p => ({
+        id: p.id,
+        name: p.name,
+        priceInr: p.priceInr,
+        durationDays: p.durationDays,
+      })),
     },
   })
 }

@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Cannot activate trial manually' }, { status: 400 })
   }
 
-  const plan = getPlan(planId)
+  const plan = await getPlan(planId)
   if (!plan) {
     return NextResponse.json({ error: 'invalid plan' }, { status: 400 })
   }
