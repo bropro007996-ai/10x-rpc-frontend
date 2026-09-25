@@ -276,21 +276,33 @@ model Notification {
 }
 
 model Plan {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  priceInr     Int
-  durationDays Int
-  description  String?
-  features     String   @default("[]") // JSON array of strings
-  isActive     Boolean  @default(true)
-  isPopular    Boolean  @default(false)
-  badge        String?
-  displayOrder Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  // Pricing — all in INR paise (1 INR = 100 paise)
+  priceInr        Int       @default(0)  // base/selling price (kept for backward compat)
+  originalPriceInr Int? // MRP — shown crossed out when offer active
+  offerPriceInr   Int? // discounted sale price (if null, uses priceInr)
+  // Offer metadata
+  offerTag        String? // short tag e.g. "LIMITED TIME", "EARLY BIRD"
+  offerText       String? // longer offer description
+  offerStartsAt   DateTime? // when offer becomes active
+  offerEndsAt     DateTime?  // when offer expires
+  // Plan config
+  durationDays    Int
+  description     String?
+  features        String    @default("[]") // JSON array of strings
+  // State
+  isActive        Boolean   @default(true) // shown on public list
+  isArchived      Boolean   @default(false) // soft-deleted (hidden everywhere, data preserved)
+  isPopular       Boolean   @default(false) // highlight as "recommended"
+  badge           String?
+  displayOrder    Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([isActive])
+  @@index([isArchived])
   @@index([displayOrder])
 }
 

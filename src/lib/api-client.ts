@@ -223,21 +223,48 @@ export interface AdminSettings {
   updatedAt: string
 }
 
+export interface PlanPricing {
+  effectivePriceInr: number
+  offerActive: boolean
+  originalPriceInr: number | null
+  discountPercent: number
+  offerTag: string | null
+  offerText: string | null
+  offerStartsAt: string | null
+  offerEndsAt: string | null
+}
+
 export interface AdminPlan {
   id: string
   name: string
   slug: string
+  // Raw pricing fields (admin-editable)
   priceInr: number
-  priceDisplay: string
+  originalPriceInr: number | null
+  offerPriceInr: number | null
+  offerTag: string | null
+  offerText: string | null
+  offerStartsAt: string | null
+  offerEndsAt: string | null
+  // Plan config
   durationDays: number
   description: string | null
   features: string[]
+  // State
   isActive: boolean
+  isArchived: boolean
   isPopular: boolean
   badge: string | null
   displayOrder: number
   createdAt: string
   updatedAt: string
+  // Computed pricing (server-driven)
+  pricing: PlanPricing
+  effectivePriceInr: number
+  effectivePriceDisplay: string
+  originalPriceDisplay: string | null
+  discountPercent: number
+  offerActive: boolean
 }
 
 export interface AdminNotificationLog {
@@ -696,19 +723,40 @@ export const api = {
   adminPlans: () => fetchJson<{ ok: boolean; plans: AdminPlan[] }>('/api/plans?all=true'),
   adminCreatePlan: (data: {
     name: string; slug: string; priceInr: number; durationDays: number;
+    originalPriceInr?: number | null; offerPriceInr?: number | null;
+    offerTag?: string | null; offerText?: string | null;
+    offerStartsAt?: string | null; offerEndsAt?: string | null;
     description?: string; features?: string[]; isActive?: boolean;
-    displayOrder?: number; isPopular?: boolean; badge?: string;
+    isArchived?: boolean; displayOrder?: number; isPopular?: boolean; badge?: string;
   }) => fetchJson<{ ok: boolean; plan: AdminPlan }>(
     '/api/plans', { method: 'POST', body: JSON.stringify(data) }
   ),
   adminUpdatePlan: (data: {
     id: string; name?: string; priceInr?: number; durationDays?: number;
+    originalPriceInr?: number | null; offerPriceInr?: number | null;
+    offerTag?: string | null; offerText?: string | null;
+    offerStartsAt?: string | null; offerEndsAt?: string | null;
     description?: string; features?: string[]; isActive?: boolean;
-    displayOrder?: number; isPopular?: boolean; badge?: string;
+    isArchived?: boolean; displayOrder?: number; isPopular?: boolean; badge?: string;
   }) => fetchJson<{ ok: boolean; plan: AdminPlan }>(
     '/api/plans', { method: 'PUT', body: JSON.stringify(data) }
   ),
-  adminDeletePlan: (id: string) => fetchJson<{ ok: boolean }>(`/api/plans?id=${id}`, { method: 'DELETE' }),
+  adminDeletePlan: (id: string, hard?: boolean) => fetchJson<{ ok: boolean; archived?: boolean; deleted?: boolean }>(
+    `/api/plans?id=${id}${hard ? '&hard=true' : ''}`, { method: 'DELETE' }
+  ),
+
+  // Public plan listing (active plans only)
+  publicPlans: () => fetchJson<{ ok: boolean; plans: AdminPlan[] }>('/api/plans'),
+
+  // 30-day one-time free trial (backend-controlled)
+  startTrial: () => fetchJson<{ ok: boolean; message?: string; endsAt?: string }>(
+    '/api/trial', { method: 'POST' }
+  ),
+  getTrialStatus: () => fetchJson<{
+    trial: { active: boolean; endsAt: string; startsAt: string; daysLeft: number; usedBefore: boolean } | null
+    canStartTrial: boolean
+    message: string
+  }>('/api/trial'),
 
   placeholders: () => fetchJson<{ placeholders: PlaceholderEntry[] }>('/api/placeholders'),
   resolvePlaceholders: (text: string) => fetchJson<{ original: string; resolved: string }>(

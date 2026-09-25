@@ -1,4 +1,4 @@
-// 10X RPC — Subscription plans + status
+// 10X RPC — Subscription status + plan activation (DB-driven, no hardcoded plans)
 import { db } from './db'
 import Razorpay from 'razorpay'
 
@@ -16,6 +16,8 @@ export function getRazorpay(): Razorpay | null {
 
 export const RAZORPAY_ENABLED = !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
 
+// Legacy interface — kept for backward compatibility with existing code.
+// New code should read plans from /api/plans (which queries the DB).
 export interface PlanInfo {
   id: string
   name: string
@@ -27,45 +29,34 @@ export interface PlanInfo {
   highlighted?: boolean
 }
 
-export const PLANS: PlanInfo[] = [
-  {
-    id: 'trial',
-    name: 'Trial',
-    price: 0,
-    period: '30 Days',
-    durationDays: 30,
-    features: ['Full feature access', '30 Days validity', 'No payment required'],
-  },
-  {
-    id: 'plus',
-    name: 'Plus (1 Month)',
-    price: 2,
-    period: '/ 1 Mo',
-    durationDays: 30,
-    features: ['Full feature access', 'Standard support', 'Basic discord role'],
-  },
-  {
-    id: 'pro',
-    name: 'Pro (3 Months)',
-    price: 4,
-    period: '/ 3 Mo',
-    durationDays: 90,
-    badge: '20% OFF',
-    highlighted: true,
-    features: ['Full feature access', 'Priority support', 'Game RPC requests', 'Custom discord role'],
-  },
-  {
-    id: 'lifetime',
-    name: 'Lifetime',
-    price: 15,
-    period: 'one-time',
-    durationDays: 36500, // ~100 years
-    features: ['Lifetime access', 'VIP support', 'All future features', 'Custom discord role'],
-  },
-]
-
-export function getPlan(id: string): PlanInfo | undefined {
-  return PLANS.find(p => p.id === id)
+/**
+ * Fetch a plan from the database by slug or id.
+ * Replaces the old hardcoded getPlan() function.
+ */
+export async function getPlan(planIdOrSlug: string): Promise<{
+  id: string
+  name: string
+  slug: string
+  priceInr: number
+  durationDays: number
+  features: string[]
+} | null> {
+  const plan = await db.plan.findFirst({
+    where: {
+      OR: [{ id: planIdOrSlug }, { slug: planIdOrSlug }],
+      isActive: true,
+      isArchived: false,
+    },
+  })
+  if (!plan) return null
+  return {
+    id: plan.id,
+    name: plan.name,
+    slug: plan.slug,
+    priceInr: plan.priceInr,
+    durationDays: plan.durationDays,
+    features: JSON.parse(plan.features || '[]'),
+  }
 }
 
 export interface SubscriptionStatus {
@@ -77,6 +68,51 @@ export interface SubscriptionStatus {
   isTrial: boolean
   isLifetime: boolean
   autoRenew: boolean
+}
+
+/**
+ * 30-day one-time free trial.
+ * Backend-controlled — trial state lives in the DB, not localStorage.
+ * Once a trial expires, it CANNOT be re-used (the Trial row remains in the DB
+ * with active=false, blocking future trial creation).
+ */
+export async function startTrial(userId: string): Promise<{ ok: boolean; message: string; endsAt?: string }> {
+  const TRIAL_DAYS = 30
+  const now = new Date()
+  const endsAt = new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
+
+  // Check if a trial already exists for this user (one-time enforcement)
+  const existing = await db.trial.findUnique({ where: { userId } })
+  if (existing) {
+    if (existing.active && existing.endsAt > now) {
+      return {
+        ok: false,
+        message: 'Trial already active',
+        endsAt: existing.endsAt.toISOString(),
+      }
+    }
+    // Trial exists but expired — DO NOT allow re-activation
+    return {
+      ok: false,
+      message: 'Trial already used. Please choose a subscription plan to continue.',
+    }
+  }
+
+  // Create the trial — first time only
+  await db.trial.create({
+    data: { userId, startsAt: now, endsAt, active: true },
+  })
+
+  await db.auditLog.create({
+    data: {
+      action: 'trial_started',
+      actor: userId,
+      target: userId,
+      metadata: JSON.stringify({ days: TRIAL_DAYS, endsAt: endsAt.toISOString() }),
+    },
+  })
+
+  return { ok: true, message: `30-day trial activated`, endsAt: endsAt.toISOString() }
 }
 
 export async function getSubscriptionStatus(userId: string): Promise<SubscriptionStatus> {
@@ -101,14 +137,21 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
   }
 
   const msLeft = sub.endsAt.getTime() - now.getTime()
+  // Look up the plan name from DB (fallback to stored plan string)
+  let planName = sub.plan
+  try {
+    const plan = await db.plan.findFirst({ where: { OR: [{ id: sub.plan }, { slug: sub.plan }] } })
+    if (plan) planName = plan.name
+  } catch {}
+
   return {
     active: true,
     plan: sub.plan,
-    planName: getPlan(sub.plan)?.name || sub.plan,
+    planName,
     endsAt: sub.endsAt.toISOString(),
     daysLeft: Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000))),
     isTrial: sub.plan === 'trial',
-    isLifetime: sub.plan === 'lifetime',
+    isLifetime: sub.plan === 'lifetime' || sub.plan === 'Lifetime',
     autoRenew: sub.autoRenew,
   }
 }
@@ -119,19 +162,24 @@ export async function checkFeatureAccess(userId: string): Promise<{ allowed: boo
   return { allowed: false, reason: 'Your subscription has expired. Please choose a plan to continue.' }
 }
 
+/**
+ * Activate a plan after successful payment.
+ * Does NOT modify existing subscriptions — extends them instead.
+ */
 export async function activatePlan(
   userId: string,
   planId: string,
   paymentId?: string,
   amountPaid?: number
 ): Promise<SubscriptionStatus> {
-  const plan = getPlan(planId)
-  if (!plan) throw new Error('Invalid plan')
+  // Fetch the plan from DB — fail if it doesn't exist or is archived
+  const plan = await db.plan.findFirst({
+    where: { OR: [{ id: planId }, { slug: planId }], isArchived: false },
+  })
+  if (!plan) throw new Error('Invalid or archived plan')
 
   const now = new Date()
-  const endsAt = new Date(now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000)
-
-  // Check if there's an existing active subscription — extend from its end date
+  // Extend from the existing subscription's end date if still active
   const existing = await db.subscription.findUnique({ where: { userId } })
   const baseDate = existing && existing.status === 'active' && existing.endsAt > now
     ? existing.endsAt
@@ -139,29 +187,31 @@ export async function activatePlan(
 
   const finalEndsAt = new Date(baseDate.getTime() + plan.durationDays * 24 * 60 * 60 * 1000)
 
+  // Upsert the subscription — this preserves existing paymentId if already set
   const sub = await db.subscription.upsert({
     where: { userId },
     create: {
       userId,
-      plan: planId,
+      plan: plan.id, // store the plan ID (stable reference)
       status: 'active',
       paymentId,
-      amountPaid: amountPaid || plan.price,
-      currency: 'usd',
+      amountPaid: amountPaid || plan.priceInr,
+      currency: 'inr',
       startsAt: now,
       endsAt: finalEndsAt,
       autoRenew: false,
     },
     update: {
-      plan: planId,
+      plan: plan.id,
       status: 'active',
       paymentId,
-      amountPaid: amountPaid || plan.price,
+      amountPaid: amountPaid || plan.priceInr,
+      currency: 'inr',
       endsAt: finalEndsAt,
     },
   })
 
-  // Also update the trial to match (so /api/me stays consistent)
+  // Sync the trial row so /api/me stays consistent
   const trial = await db.trial.findUnique({ where: { userId } })
   if (trial) {
     await db.trial.update({
@@ -169,6 +219,20 @@ export async function activatePlan(
       data: { endsAt: finalEndsAt, active: true },
     })
   }
+
+  await db.auditLog.create({
+    data: {
+      action: 'subscription_activated',
+      actor: userId,
+      target: sub.id,
+      metadata: JSON.stringify({
+        planId: plan.id,
+        planName: plan.name,
+        amountPaid: amountPaid || plan.priceInr,
+        endsAt: finalEndsAt.toISOString(),
+      }),
+    },
+  })
 
   return getSubscriptionStatus(userId)
 }

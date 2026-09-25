@@ -1,20 +1,9 @@
-// 10X RPC — Subscription panel
+// 10X RPC — Subscription panel (dynamic plans from DB, INR pricing, offers)
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { api } from '@/lib/api-client'
-import { Crown, Check, Clock, Zap, X } from 'lucide-react'
-
-interface PlanInfo {
-  id: string
-  name: string
-  price: number
-  period: string
-  durationDays: number
-  features: string[]
-  badge?: string
-  highlighted?: boolean
-}
+import { api, type AdminPlan } from '@/lib/api-client'
+import { Crown, Check, Clock, Zap, X, Gift, Tag } from 'lucide-react'
 
 interface SubStatus {
   active: boolean
@@ -29,30 +18,52 @@ interface SubStatus {
 
 export function SubscriptionPanel() {
   const [status, setStatus] = useState<SubStatus | null>(null)
-  const [plans, setPlans] = useState<PlanInfo[]>([])
+  const [plans, setPlans] = useState<AdminPlan[]>([])
+  const [trialStatus, setTrialStatus] = useState<{ canStartTrial: boolean; message: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [buying, setBuying] = useState(false)
+  const [startingTrial, setStartingTrial] = useState(false)
   const [showPlans, setShowPlans] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const r = await api.subscriptionStatus()
-      setStatus(r.status)
-      setPlans(r.plans)
+      const [subRes, plansRes, trialRes] = await Promise.all([
+        api.subscriptionStatus(),
+        api.publicPlans(),
+        api.getTrialStatus().catch(() => null),
+      ])
+      setStatus(subRes.status)
+      setPlans(plansRes.plans)
+      if (trialRes) setTrialStatus({ canStartTrial: trialRes.canStartTrial, message: trialRes.message })
     } catch {
       // ignore
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const handleStartTrial = async () => {
+    setStartingTrial(true)
+    try {
+      const r = await api.startTrial()
+      if (r.ok) {
+        toast.success(r.message || 'Trial activated! 30 days of full access.', { duration: 4000 })
+        await refresh()
+      } else {
+        toast.error(r.message || 'Failed to start trial')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed')
+    } finally { setStartingTrial(false) }
   }
 
-  useEffect(() => { refresh() }, [])
-
-  const handleActivate = async (planId: string) => {
+  const handleActivate = async (plan: AdminPlan) => {
     setBuying(true)
     try {
-      // Step 1: Create Razorpay order
-      const orderRes = await api.razorpayCreateOrder(planId)
+      // Step 1: Create Razorpay order — amount comes from DB, not frontend
+      const orderRes = await api.razorpayCreateOrder(plan.id)
       if (!orderRes.ok) {
         toast.error(orderRes.error || 'Failed to create payment order')
         return
@@ -61,7 +72,7 @@ export function SubscriptionPanel() {
       // Step 2: Open Razorpay checkout
       const rzp = new (window as any).Razorpay({
         key: orderRes.keyId,
-        amount: orderRes.amount,
+        amount: orderRes.amount, // in paise — from DB via backend
         currency: orderRes.currency,
         name: '10X RPC',
         description: orderRes.planName,
@@ -75,7 +86,7 @@ export function SubscriptionPanel() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_signature: response.razorpay_signature,
-              planId,
+              planId: plan.id,
             })
             if (verifyRes.ok) {
               toast.success(verifyRes.message || 'Plan activated!', { duration: 4000 })
@@ -124,7 +135,6 @@ export function SubscriptionPanel() {
   }
 
   if (loading) return null
-
   if (!status) return null
 
   return (
@@ -173,6 +183,28 @@ export function SubscriptionPanel() {
           )}
         </div>
 
+        {/* Trial CTA — only shown if user can start a trial */}
+        {trialStatus?.canStartTrial && !status.active && (
+          <div className="glass-card-inner p-3 mb-3 border-emerald-500/30 bg-emerald-500/5">
+            <div className="flex items-start gap-2">
+              <Gift className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-emerald-300">30-Day Free Trial Available</p>
+                <p className="text-[10px] text-white/50 mt-0.5">
+                  Get full access for 30 days — no payment required. One-time only.
+                </p>
+              </div>
+              <button
+                onClick={handleStartTrial}
+                disabled={startingTrial}
+                className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-semibold rounded-lg px-3 py-1.5 text-xs hover:bg-emerald-500/25 disabled:opacity-50 flex-shrink-0"
+              >
+                {startingTrial ? '...' : 'Start Trial'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex gap-2">
           {!status.isLifetime && (
@@ -194,47 +226,84 @@ export function SubscriptionPanel() {
           )}
         </div>
 
-        {/* Plan cards */}
+        {/* Plan cards — dynamic from DB */}
         {showPlans && (
           <div className="mt-4 space-y-3">
-            {plans.filter(p => p.id !== 'trial').map(plan => (
-              <div
-                key={plan.id}
-                className={`glass-card-inner p-4 ${plan.highlighted ? 'border-purple-500/40 purple-glow' : ''} relative overflow-hidden`}
-              >
-                {plan.badge && (
-                  <div className="absolute top-3 right-3 purple-gradient text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {plan.badge}
-                  </div>
-                )}
-                <div className="flex items-baseline gap-2 mb-3">
-                  <span className="text-sm text-white/50">{plan.name.split('(')[0]}</span>
-                  <span className="text-3xl font-black text-white">${plan.price}</span>
-                  <span className="text-sm text-white/50">{plan.period}</span>
-                </div>
-                <ul className="space-y-1.5 mb-4">
-                  {plan.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-xs text-white/70">
-                      <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => handleActivate(plan.id)}
-                  disabled={buying}
-                  className={`w-full font-bold rounded-xl py-2.5 text-sm transition-all active:scale-[0.98] disabled:opacity-50 ${
-                    plan.highlighted
-                      ? 'purple-gradient text-white shadow-lg shadow-purple-900/30 hover:opacity-90'
-                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
-                  }`}
+            {plans.length === 0 ? (
+              <p className="text-xs text-white/40 text-center py-4">No plans available yet. Check back soon.</p>
+            ) : (
+              plans.map(plan => (
+                <div
+                  key={plan.id}
+                  className={`glass-card-inner p-4 ${plan.isPopular ? 'border-purple-500/40' : ''} relative overflow-hidden`}
                 >
-                  {buying ? 'Processing...' : `Buy ${plan.name.split('(')[0].trim()}`}
-                </button>
-              </div>
-            ))}
+                  {/* Offer tag (top-right) */}
+                  {plan.offerActive && plan.pricing.offerTag && (
+                    <div className="absolute top-3 right-3 bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      🏷️ {plan.pricing.offerTag}
+                    </div>
+                  )}
+                  {plan.badge && !plan.offerActive && (
+                    <div className="absolute top-3 right-3 purple-gradient text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {plan.badge}
+                    </div>
+                  )}
+
+                  {/* Plan name */}
+                  <p className="text-sm text-white/50 mb-1">{plan.name}</p>
+
+                  {/* Price — crossed out original when offer active */}
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-3xl font-black text-white">{plan.effectivePriceDisplay}</span>
+                    {plan.offerActive && plan.originalPriceDisplay && (
+                      <span className="text-lg font-mono text-white/40 line-through">{plan.originalPriceDisplay}</span>
+                    )}
+                    <span className="text-sm text-white/50">{plan.durationDays} days</span>
+                  </div>
+
+                  {/* Discount badge */}
+                  {plan.offerActive && plan.discountPercent > 0 && (
+                    <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-300 text-[10px] font-bold px-2 py-0.5 rounded-full mb-3">
+                      <Tag className="w-2.5 h-2.5" />
+                      {plan.discountPercent}% OFF
+                    </div>
+                  )}
+
+                  {/* Offer text */}
+                  {plan.offerActive && plan.pricing.offerText && (
+                    <p className="text-xs text-amber-300/80 mb-2 italic">"{plan.pricing.offerText}"</p>
+                  )}
+
+                  {/* Description */}
+                  {plan.description && <p className="text-xs text-white/60 mb-3">{plan.description}</p>}
+
+                  {/* Features */}
+                  <ul className="space-y-1.5 mb-4">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-xs text-white/70">
+                        <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Buy button */}
+                  <button
+                    onClick={() => handleActivate(plan)}
+                    disabled={buying}
+                    className={`w-full font-bold rounded-xl py-2.5 text-sm transition-all active:scale-[0.98] disabled:opacity-50 ${
+                      plan.isPopular
+                        ? 'purple-gradient text-white shadow-lg shadow-purple-900/30 hover:opacity-90'
+                        : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {buying ? 'Processing...' : `Buy ${plan.name}`}
+                  </button>
+                </div>
+              ))
+            )}
             <p className="text-xs text-white/30 text-center">
-              Manual activation for now. Stripe integration coming soon.
+              🔒 Payments secured by Razorpay. Prices in INR (₹).
             </p>
           </div>
         )}
