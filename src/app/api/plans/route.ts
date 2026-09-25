@@ -18,16 +18,20 @@ interface PlanInput {
   priceInr?: number
   originalPriceInr?: number | null
   offerPriceInr?: number | null
+  offerEnabled?: boolean
   offerTag?: string | null
   offerText?: string | null
   offerStartsAt?: string | null
   offerEndsAt?: string | null
   durationDays?: number
+  durationUnit?: string
   description?: string
   features?: string[]
   isActive?: boolean
+  isVisible?: boolean
   isArchived?: boolean
   isPopular?: boolean
+  isRecommended?: boolean
   badge?: string | null
   displayOrder?: number
 }
@@ -43,18 +47,22 @@ function serializePlan(p: any) {
     priceInr: p.priceInr,
     originalPriceInr: p.originalPriceInr ?? null,
     offerPriceInr: p.offerPriceInr ?? null,
+    offerEnabled: p.offerEnabled ?? false,
     offerTag: p.offerTag ?? null,
     offerText: p.offerText ?? null,
     offerStartsAt: p.offerStartsAt ? p.offerStartsAt.toISOString() : null,
     offerEndsAt: p.offerEndsAt ? p.offerEndsAt.toISOString() : null,
     // Plan config
     durationDays: p.durationDays,
+    durationUnit: p.durationUnit ?? 'days',
     description: p.description,
     features: JSON.parse(p.features || '[]'),
     // State
     isActive: p.isActive,
+    isVisible: p.isVisible ?? true,
     isArchived: p.isArchived,
     isPopular: p.isPopular,
+    isRecommended: p.isRecommended ?? false,
     badge: p.badge,
     displayOrder: p.displayOrder,
     createdAt: p.createdAt.toISOString(),
@@ -85,7 +93,7 @@ export async function GET(req: Request) {
   }
 
   const plans = await db.plan.findMany({
-    where: all ? {} : { isActive: true, isArchived: false },
+    where: all ? {} : { isActive: true, isVisible: true, isArchived: false },
     orderBy: { displayOrder: 'asc' },
   })
   return NextResponse.json({ ok: true, plans: plans.map(serializePlan) })
@@ -127,10 +135,14 @@ export async function POST(req: Request) {
     durationDays: body.durationDays,
     features: JSON.stringify(body.features || []),
     isActive: body.isActive ?? true,
+    isVisible: body.isVisible ?? true,
     isArchived: body.isArchived ?? false,
     isPopular: body.isPopular ?? false,
+    isRecommended: body.isRecommended ?? false,
+    offerEnabled: body.offerEnabled ?? false,
     displayOrder: body.displayOrder ?? 0,
   }
+  if (body.durationUnit !== undefined) data.durationUnit = body.durationUnit
   if (body.description !== undefined) data.description = body.description || null
   if (body.badge !== undefined) data.badge = body.badge || null
   if (body.originalPriceInr !== undefined) data.originalPriceInr = body.originalPriceInr ?? null
@@ -190,11 +202,15 @@ export async function PUT(req: Request) {
   }
   if (body.priceInr !== undefined) data.priceInr = Math.round(body.priceInr)
   if (body.durationDays !== undefined) data.durationDays = body.durationDays
+  if (body.durationUnit !== undefined) data.durationUnit = body.durationUnit
   if (body.description !== undefined) data.description = body.description || null
   if (body.features !== undefined) data.features = JSON.stringify(body.features)
   if (body.isActive !== undefined) data.isActive = body.isActive
+  if (body.isVisible !== undefined) data.isVisible = body.isVisible
   if (body.isArchived !== undefined) data.isArchived = body.isArchived
   if (body.isPopular !== undefined) data.isPopular = body.isPopular
+  if (body.isRecommended !== undefined) data.isRecommended = body.isRecommended
+  if (body.offerEnabled !== undefined) data.offerEnabled = body.offerEnabled
   if (body.badge !== undefined) data.badge = body.badge || null
   if (body.originalPriceInr !== undefined) data.originalPriceInr = body.originalPriceInr ?? null
   if (body.offerPriceInr !== undefined) data.offerPriceInr = body.offerPriceInr ?? null

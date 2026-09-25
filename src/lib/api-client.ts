@@ -242,18 +242,22 @@ export interface AdminPlan {
   priceInr: number
   originalPriceInr: number | null
   offerPriceInr: number | null
+  offerEnabled: boolean
   offerTag: string | null
   offerText: string | null
   offerStartsAt: string | null
   offerEndsAt: string | null
   // Plan config
   durationDays: number
+  durationUnit: string
   description: string | null
   features: string[]
   // State
   isActive: boolean
+  isVisible: boolean
   isArchived: boolean
   isPopular: boolean
+  isRecommended: boolean
   badge: string | null
   displayOrder: number
   createdAt: string
@@ -723,21 +727,25 @@ export const api = {
   adminPlans: () => fetchJson<{ ok: boolean; plans: AdminPlan[] }>('/api/plans?all=true'),
   adminCreatePlan: (data: {
     name: string; slug: string; priceInr: number; durationDays: number;
-    originalPriceInr?: number | null; offerPriceInr?: number | null;
+    originalPriceInr?: number | null; offerPriceInr?: number | null; offerEnabled?: boolean;
     offerTag?: string | null; offerText?: string | null;
     offerStartsAt?: string | null; offerEndsAt?: string | null;
+    durationUnit?: string;
     description?: string; features?: string[]; isActive?: boolean;
-    isArchived?: boolean; displayOrder?: number; isPopular?: boolean; badge?: string;
+    isVisible?: boolean; isArchived?: boolean;
+    displayOrder?: number; isPopular?: boolean; isRecommended?: boolean; badge?: string;
   }) => fetchJson<{ ok: boolean; plan: AdminPlan }>(
     '/api/plans', { method: 'POST', body: JSON.stringify(data) }
   ),
   adminUpdatePlan: (data: {
     id: string; name?: string; priceInr?: number; durationDays?: number;
-    originalPriceInr?: number | null; offerPriceInr?: number | null;
+    originalPriceInr?: number | null; offerPriceInr?: number | null; offerEnabled?: boolean;
     offerTag?: string | null; offerText?: string | null;
     offerStartsAt?: string | null; offerEndsAt?: string | null;
+    durationUnit?: string;
     description?: string; features?: string[]; isActive?: boolean;
-    isArchived?: boolean; displayOrder?: number; isPopular?: boolean; badge?: string;
+    isVisible?: boolean; isArchived?: boolean;
+    displayOrder?: number; isPopular?: boolean; isRecommended?: boolean; badge?: string;
   }) => fetchJson<{ ok: boolean; plan: AdminPlan }>(
     '/api/plans', { method: 'PUT', body: JSON.stringify(data) }
   ),

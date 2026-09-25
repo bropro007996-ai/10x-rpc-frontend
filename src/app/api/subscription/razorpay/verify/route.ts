@@ -64,12 +64,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'payment_record_not_found' }, { status: 404 })
   }
 
+  // IDEMPOTENCY CHECK: If this payment was already verified, return success
+  // without re-activating the subscription (prevents duplicate webhooks/callbacks)
+  if (payment.status === 'verified' || payment.status === 'captured') {
+    const existingSub = await db.subscription.findUnique({ where: { userId: session.userId } })
+    if (existingSub && existingSub.status === 'active') {
+      return NextResponse.json({
+        ok: true,
+        message: 'Payment already verified — subscription is active',
+        idempotent: true,
+      })
+    }
+  }
+
   // SECURITY CHECK: Confirm the paid amount matches our DB record
-  // (Razorpay guarantees this via signature, but we double-check our own record)
   if (payment.amount !== planData.priceInr) {
     console.error(`Price mismatch! DB plan: ${planData.priceInr}, Payment record: ${payment.amount}`)
-    // We still activate using the Payment record's amount (which was set during create-order from DB)
-    // This is a safety log — the payment was already captured by Razorpay.
   }
 
   // Mark payment as verified

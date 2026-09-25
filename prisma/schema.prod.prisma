@@ -284,22 +284,27 @@ model Plan {
   priceInr        Int       @default(0)
   originalPriceInr Int?
   offerPriceInr   Int?
+  offerEnabled    Boolean   @default(false)
   offerTag        String?
   offerText       String?
   offerStartsAt   DateTime?
   offerEndsAt     DateTime?
   durationDays    Int
+  durationUnit    String    @default("days")
   description     String?
   features        String    @default("[]")
   isActive        Boolean   @default(true)
+  isVisible       Boolean   @default(true)
   isArchived      Boolean   @default(false)
   isPopular       Boolean   @default(false)
+  isRecommended   Boolean   @default(false)
   badge           String?
   displayOrder    Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([isActive])
+  @@index([isVisible])
   @@index([isArchived])
   @@index([displayOrder])
 }

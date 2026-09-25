@@ -20,11 +20,15 @@ interface PlanForm {
   offerText: string
   offerStartsAt: string     // datetime-local
   offerEndsAt: string       // datetime-local
+  offerEnabled: boolean
   durationDays: number
+  durationUnit: string
   description: string
   featuresText: string
   isActive: boolean
+  isVisible: boolean
   isPopular: boolean
+  isRecommended: boolean
   badge: string
   displayOrder: number
 }
@@ -39,11 +43,15 @@ const EMPTY_FORM: PlanForm = {
   offerText: '',
   offerStartsAt: '',
   offerEndsAt: '',
+  offerEnabled: false,
   durationDays: 30,
+  durationUnit: 'days',
   description: '',
   featuresText: '',
   isActive: true,
+  isVisible: true,
   isPopular: false,
+  isRecommended: false,
   badge: '',
   displayOrder: 0,
 }
@@ -87,11 +95,15 @@ export function PlansTab({ refreshKey }: PlansTabProps) {
       offerText: p.offerText || '',
       offerStartsAt: toLocalDatetime(p.offerStartsAt),
       offerEndsAt: toLocalDatetime(p.offerEndsAt),
+      offerEnabled: p.offerEnabled ?? false,
       durationDays: p.durationDays,
+      durationUnit: p.durationUnit || 'days',
       description: p.description || '',
       featuresText: p.features.join('\n'),
       isActive: p.isActive,
+      isVisible: p.isVisible ?? true,
       isPopular: p.isPopular,
+      isRecommended: p.isRecommended ?? false,
       badge: p.badge || '',
       displayOrder: p.displayOrder,
     })
@@ -133,15 +145,19 @@ export function PlansTab({ refreshKey }: PlansTabProps) {
         priceInr: Math.round(form.priceInr),
         originalPriceInr: form.originalPriceInr ? Math.round(Number(form.originalPriceInr)) : null,
         offerPriceInr: form.offerPriceInr ? Math.round(Number(form.offerPriceInr)) : null,
+        offerEnabled: form.offerEnabled,
         offerTag: form.offerTag || null,
         offerText: form.offerText || null,
         offerStartsAt: form.offerStartsAt || null,
         offerEndsAt: form.offerEndsAt || null,
         durationDays: form.durationDays,
+        durationUnit: form.durationUnit || 'days',
         description: form.description || undefined,
         features,
         isActive: form.isActive,
+        isVisible: form.isVisible,
         isPopular: form.isPopular,
+        isRecommended: form.isRecommended,
         badge: form.badge || undefined,
         displayOrder: form.displayOrder,
       }
@@ -371,17 +387,32 @@ export function PlansTab({ refreshKey }: PlansTabProps) {
                   placeholder="e.g. BEST VALUE" maxLength={30}
                   className="w-full bg-[#13141a] border border-white/8 text-white text-xs rounded-xl px-3 py-2 placeholder:text-white/40 focus-visible:ring-purple-500/40 outline-none" />
               </div>
-              <div className="flex items-center gap-4 mt-3">
+              <div className="flex flex-wrap items-center gap-4 mt-3">
                 <label className="flex items-center gap-1.5 text-xs text-white/70 cursor-pointer select-none">
                   <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })}
                     className="accent-purple-500" />
                   Active
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-white/70 cursor-pointer select-none">
+                  <input type="checkbox" checked={form.isVisible} onChange={e => setForm({ ...form, isVisible: e.target.checked })}
+                    className="accent-purple-500" />
+                  Visible
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-white/70 cursor-pointer select-none">
+                  <input type="checkbox" checked={form.offerEnabled} onChange={e => setForm({ ...form, offerEnabled: e.target.checked })}
+                    className="accent-purple-500" />
+                  Offer Enabled
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-white/70 cursor-pointer select-none">
                   <input type="checkbox" checked={form.isPopular} onChange={e => setForm({ ...form, isPopular: e.target.checked })}
                     className="accent-purple-500" />
                   <Star className="w-3 h-3 text-amber-400" />
-                  Popular / Recommended
+                  Popular
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-white/70 cursor-pointer select-none">
+                  <input type="checkbox" checked={form.isRecommended} onChange={e => setForm({ ...form, isRecommended: e.target.checked })}
+                    className="accent-purple-500" />
+                  Recommended
                 </label>
               </div>
             </div>

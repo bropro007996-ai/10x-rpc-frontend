@@ -4,11 +4,12 @@ import { PrimaryButton, GhostButton } from './ui'
 import { useRouter } from './useRouter'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { api, type Me } from '@/lib/api-client'
+import { api, type Me, type AdminPlan } from '@/lib/api-client'
 
 export function LandingPage() {
   const { navigate } = useRouter()
   const [me, setMe] = useState<Me | null>(null)
+  const [plans, setPlans] = useState<AdminPlan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -23,6 +24,8 @@ export function LandingPage() {
       }
     }
     api.me().then(m => { setMe(m); setLoading(false) }).catch(() => setLoading(false))
+    // Fetch dynamic plans from DB
+    api.publicPlans().then(r => setPlans(r.plans)).catch(() => {})
   }, [])
 
   const onStart = () => {
@@ -114,41 +117,28 @@ export function LandingPage() {
           </div>
 
           <div className="space-y-4">
-            {/* Trial */}
-            <PricingCard
-              name="Trial"
-              price="₹0"
-              period="/ 30 Days"
-              features={['Full feature access', '30 Days validity']}
-              cta="Try Now"
-              ctaStyle="ghost"
-              onCta={onStart}
-            />
-
-            {/* Pro (3 Months) */}
-            <PricingCard
-              name="Pro (3 Months)"
-              price="₹399"
-              originalPrice="₹499"
-              period="/ 3 Mo"
-              badge="20% OFF"
-              features={['Full feature Access', 'Priority Support', 'Game RPC Requests', 'Custom discord role']}
-              cta="Buy Now"
-              ctaStyle="primary"
-              highlighted
-              onCta={onStart}
-            />
-
-            {/* Plus (1 Month) */}
-            <PricingCard
-              name="Plus (1 Month)"
-              price="₹199"
-              period="/ 1 Mo"
-              features={['Full feature access', 'Standard Support', 'Basic discord role']}
-              cta="Buy Now"
-              ctaStyle="ghost"
-              onCta={onStart}
-            />
+            {plans.length === 0 ? (
+              <p className="text-center text-white/40 py-8">Loading plans...</p>
+            ) : (
+              plans.map(plan => {
+                const isTrial = plan.priceInr === 0 || plan.slug === 'trial'
+                return (
+                  <PricingCard
+                    key={plan.id}
+                    name={plan.name}
+                    price={plan.effectivePriceDisplay}
+                    originalPrice={plan.offerActive ? plan.originalPriceDisplay ?? undefined : undefined}
+                    period={`/ ${plan.durationDays} ${plan.durationUnit === 'days' ? (plan.durationDays > 1 ? 'Days' : 'Day') : plan.durationUnit}`}
+                    badge={plan.offerActive ? (plan.pricing.offerTag ?? `${plan.discountPercent}% OFF`) : plan.badge ?? undefined}
+                    features={plan.features}
+                    cta={isTrial ? 'Try Now' : 'Buy Now'}
+                    ctaStyle={plan.isPopular || plan.isRecommended ? 'primary' : 'ghost'}
+                    highlighted={plan.isPopular || plan.isRecommended}
+                    onCta={onStart}
+                  />
+                )
+              })
+            )}
           </div>
         </div>
       </section>

@@ -24,26 +24,32 @@ export interface PlanPricing {
  * uses this value, never a frontend-supplied amount.
  *
  * Logic:
- * - If offerPriceInr is set AND (offerStartsAt is null or in the past)
- *   AND (offerEndsAt is null or in the future) → offer is active
- * - When offer is active: effectivePrice = offerPriceInr, originalPrice = originalPriceInr || priceInr
- * - When offer is NOT active: effectivePrice = priceInr, originalPrice = null
- * - discountPercent = round((1 - effectivePrice / originalPrice) * 100) when offer active
+ * - offerEnabled must be true (master toggle)
+ * - offerPriceInr must be set AND > 0
+ * - offerStartsAt must be null or in the past
+ * - offerEndsAt must be null or in the future
+ * → offer is active
+ *
+ * When offer is active: effectivePrice = offerPriceInr, originalPrice = originalPriceInr || priceInr
+ * When offer is NOT active: effectivePrice = priceInr, originalPrice = null
+ * discountPercent = round((1 - effectivePrice / originalPrice) * 100) when offer active
  */
 export function calculatePlanPricing(plan: {
   priceInr: number
   originalPriceInr?: number | null
   offerPriceInr?: number | null
+  offerEnabled?: boolean
   offerTag?: string | null
   offerText?: string | null
   offerStartsAt?: Date | null
   offerEndsAt?: Date | null
 }): PlanPricing {
   const now = new Date()
+  const offerMasterEnabled = plan.offerEnabled !== false // default true if not set (backward compat)
   const offerStartOk = !plan.offerStartsAt || plan.offerStartsAt <= now
   const offerEndOk = !plan.offerEndsAt || plan.offerEndsAt >= now
   const hasOfferPrice = typeof plan.offerPriceInr === 'number' && plan.offerPriceInr! > 0
-  const offerActive = hasOfferPrice && offerStartOk && offerEndOk
+  const offerActive = offerMasterEnabled && hasOfferPrice && offerStartOk && offerEndOk
 
   if (offerActive) {
     const effective = plan.offerPriceInr!
@@ -79,7 +85,8 @@ export function calculatePlanPricing(plan: {
  * Fetch the effective price for a plan from the database.
  * Used by Razorpay order creation — NEVER trust a frontend-supplied amount.
  *
- * Returns null if the plan doesn't exist, is archived, or is inactive.
+ * Returns null if the plan doesn't exist, is archived, inactive, or not visible.
+ * This enforces both isActive (purchasable) AND isVisible (shown publicly).
  */
 export async function getEffectivePlanPrice(planId: string): Promise<{
   planId: string
@@ -89,7 +96,7 @@ export async function getEffectivePlanPrice(planId: string): Promise<{
   pricing: PlanPricing
 } | null> {
   const plan = await db.plan.findUnique({ where: { id: planId } })
-  if (!plan || plan.isArchived || !plan.isActive) return null
+  if (!plan || plan.isArchived || !plan.isActive || !plan.isVisible) return null
 
   const pricing = calculatePlanPricing(plan)
   return {
