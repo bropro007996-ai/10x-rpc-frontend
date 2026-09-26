@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from './useRouter'
 import {
-  Home, LayoutDashboard, User, Settings, Shield, Activity,
-  Receipt, LogOut, Menu, X, Server, Bell, CreditCard, Crown, Gamepad2,
-  Clock, Zap, RefreshCw, ExternalLink, ChevronRight
+  Home, LayoutDashboard, User, Settings, Shield,
+  LogOut, Menu, X, Server, Crown, Gamepad2,
+  ExternalLink, ChevronRight
 } from 'lucide-react'
 
 interface NavMenuProps {
@@ -51,9 +51,6 @@ export function NavMenu({ isAdmin, onLogout }: NavMenuProps) {
       title: 'Account',
       items: [
         { label: 'Subscription', icon: Crown, scrollTarget: 'subscription' },
-        { label: 'Payment History', icon: Receipt, href: '/dashboard' },
-        { label: 'Activity Log', icon: Activity, href: '/dashboard' },
-        { label: 'Notifications', icon: Bell, href: '/dashboard' },
       ],
     },
     {
