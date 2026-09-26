@@ -1,5 +1,6 @@
 // 10X RPC — /api/admin/user-action — per-user admin actions (admin only)
-// Actions: sync (push presence), stop-rpc (clear presence), extend-trial, delete-user
+// Actions: sync, stop-rpc, extend-trial, delete-user, toggle-status,
+//          toggle-games-rpc, apply-template, ban (suspend), unban (unsuspend)
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
@@ -22,17 +23,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const body = await req.json() as {
-    userId?: string
-    action?: 'sync' | 'stop-rpc' | 'extend-trial' | 'delete-user' | 'toggle-status' | 'toggle-games-rpc' | 'apply-template'
-    days?: number
-    enable?: boolean
-    template?: { name: string; state: string; details: string; type: string }
+  // Parse body safely — handle edge cases where body might be malformed
+  let body: any
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
   }
 
-  const { userId, action } = body
-  if (!userId || !action) {
-    return NextResponse.json({ error: 'missing userId or action' }, { status: 400 })
+  // Handle both 'action' as a top-level field AND 'action' nested inside the body
+  // (the api-client sends { userId, action, ...data } — but some callers send { userId, action: 'foo', days: 30 })
+  const userId = body.userId
+  const action = body.action
+
+  if (!userId || typeof userId !== 'string') {
+    return NextResponse.json({ ok: false, error: 'missing userId' }, { status: 400 })
+  }
+  if (!action || typeof action !== 'string') {
+    return NextResponse.json({ ok: false, error: 'missing action' }, { status: 400 })
+  }
+
+  // Allowed actions
+  const ALLOWED_ACTIONS = [
+    'sync', 'stop-rpc', 'extend-trial', 'delete-user',
+    'toggle-status', 'toggle-games-rpc', 'apply-template',
+    'ban', 'unban', 'reset-workspace',
+  ]
+  if (!ALLOWED_ACTIONS.includes(action)) {
+    return NextResponse.json({ ok: false, error: `unknown action: ${action}` }, { status: 400 })
   }
 
   try {
@@ -41,26 +59,51 @@ export async function POST(req: Request) {
       select: { id: true, discordId: true, username: true },
     })
     if (!targetUser) {
-      return NextResponse.json({ error: 'user not found' }, { status: 404 })
+      return NextResponse.json({ ok: false, error: 'user not found' }, { status: 404 })
+    }
+
+    // Don't allow actions on other admins (security)
+    if (isAdmin(targetUser.discordId) && targetUser.id !== session.userId && action === 'delete-user') {
+      return NextResponse.json({ ok: false, error: 'cannot delete admin user' }, { status: 403 })
     }
 
     switch (action) {
       case 'sync': {
         const result = await daemonSyncUser(userId)
-        return NextResponse.json({ ok: result.ok, message: result.message, method: result.method })
+        await db.auditLog.create({
+          data: {
+            action: 'admin_user_sync',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
+        return NextResponse.json({ ok: result.ok, message: result.message || 'Synced' })
       }
 
       case 'stop-rpc': {
         await db.session.updateMany({
           where: { userId },
-          data: { rpcEnabled: false, gatewayReady: false },
+          data: { rpcEnabled: false, gamesRpcEnabled: false },
         })
         await db.rpcConfig.updateMany({
           where: { userId },
           data: { enabled: false },
         })
+        await db.gameRpcConfig.updateMany({
+          where: { userId },
+          data: { enabled: false },
+        })
         const result = await daemonStopUserRpc(userId)
-        return NextResponse.json({ ok: result.ok, message: 'RPC stopped & cleared' })
+        await db.auditLog.create({
+          data: {
+            action: 'admin_stop_rpc',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
+        return NextResponse.json({ ok: true, message: 'RPC stopped & cleared' })
       }
 
       case 'toggle-status': {
@@ -68,7 +111,7 @@ export async function POST(req: Request) {
           where: { userId, discordAccessToken: { not: null }, expiresAt: { gt: new Date() } },
           orderBy: { discordTokenExpiresAt: 'desc' },
         })
-        const newStatus = !body.enable ? !s?.statusEnabled : body.enable
+        const newStatus = body.enable !== undefined ? !!body.enable : !s?.statusEnabled
         await db.session.updateMany({
           where: { userId },
           data: { statusEnabled: newStatus },
@@ -76,7 +119,7 @@ export async function POST(req: Request) {
         if (s?.discordAccessToken) {
           await daemonSyncUser(userId)
         }
-        return NextResponse.json({ ok: true, statusEnabled: newStatus })
+        return NextResponse.json({ ok: true, message: `Status ${newStatus ? 'enabled' : 'disabled'}`, statusEnabled: newStatus })
       }
 
       case 'toggle-games-rpc': {
@@ -84,7 +127,7 @@ export async function POST(req: Request) {
           where: { userId, discordAccessToken: { not: null }, expiresAt: { gt: new Date() } },
           orderBy: { discordTokenExpiresAt: 'desc' },
         })
-        const newGamesRpc = !body.enable ? !s?.gamesRpcEnabled : body.enable
+        const newGamesRpc = body.enable !== undefined ? !!body.enable : !s?.gamesRpcEnabled
         await db.session.updateMany({
           where: { userId },
           data: { gamesRpcEnabled: newGamesRpc },
@@ -96,11 +139,11 @@ export async function POST(req: Request) {
         if (s?.discordAccessToken) {
           await daemonSyncUser(userId)
         }
-        return NextResponse.json({ ok: true, gamesRpcEnabled: newGamesRpc })
+        return NextResponse.json({ ok: true, message: `Games RPC ${newGamesRpc ? 'enabled' : 'disabled'}`, gamesRpcEnabled: newGamesRpc })
       }
 
       case 'extend-trial': {
-        const days = body.days || 30
+        const days = Number(body.days) || 30
         const trial = await db.trial.findUnique({ where: { userId } })
         const now = new Date()
         const baseDate = trial?.endsAt && trial.endsAt > now ? trial.endsAt : now
@@ -115,6 +158,14 @@ export async function POST(req: Request) {
             data: { userId, endsAt: newEnd, active: true },
           })
         }
+        await db.auditLog.create({
+          data: {
+            action: 'admin_extend_trial',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username, days, newEnd: newEnd.toISOString() }),
+          },
+        })
         return NextResponse.json({
           ok: true,
           message: `Trial extended by ${days} days`,
@@ -122,16 +173,145 @@ export async function POST(req: Request) {
         })
       }
 
+      case 'ban': {
+        // Suspend the user's subscription
+        const sub = await db.subscription.findUnique({ where: { userId } })
+        const now = new Date()
+        if (sub) {
+          const gracePeriodEnd = sub.endsAt > now
+            ? new Date(sub.endsAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+            : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+          await db.subscription.update({
+            where: { userId },
+            data: {
+              status: 'suspended',
+              suspendedAt: now,
+              gracePeriodEnd,
+            },
+          })
+        }
+        // Stop RPC
+        await db.session.updateMany({
+          where: { userId },
+          data: { rpcEnabled: false, gamesRpcEnabled: false, statusEnabled: false },
+        })
+        await db.rpcConfig.updateMany({
+          where: { userId },
+          data: { enabled: false },
+        })
+        await db.gameRpcConfig.updateMany({
+          where: { userId },
+          data: { enabled: false },
+        })
+        await daemonStopUserRpc(userId)
+        await db.auditLog.create({
+          data: {
+            action: 'admin_suspend_user',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
+        return NextResponse.json({ ok: true, message: `User ${targetUser.username} suspended` })
+      }
+
+      case 'unban': {
+        // Unsuspend — reactivate subscription
+        const sub = await db.subscription.findUnique({ where: { userId } })
+        if (sub) {
+          const now = new Date()
+          // If grace period hasn't ended, restore from original expiry
+          // If grace period ended, give them 30 days from now
+          const newEnd = sub.gracePeriodEnd && sub.gracePeriodEnd > now
+            ? sub.endsAt > now ? sub.endsAt : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+            : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+          await db.subscription.update({
+            where: { userId },
+            data: {
+              status: 'active',
+              suspendedAt: null,
+              gracePeriodEnd: null,
+              endsAt: newEnd,
+            },
+          })
+        }
+        await db.auditLog.create({
+          data: {
+            action: 'admin_unsuspend_user',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
+        return NextResponse.json({ ok: true, message: `User ${targetUser.username} unsuspended` })
+      }
+
+      case 'reset-workspace': {
+        // Reset RPC config + game config to defaults
+        await db.rpcConfig.updateMany({
+          where: { userId },
+          data: {
+            name: '10X RPC',
+            type: 'PLAYING',
+            state: null,
+            details: null,
+            largeImage: null,
+            largeText: null,
+            smallImage: null,
+            smallText: null,
+            button1Label: null,
+            button1Url: null,
+            button2Label: null,
+            button2Url: null,
+            partyCurrent: null,
+            partyMax: null,
+            enabled: false,
+          },
+        })
+        await db.gameRpcConfig.updateMany({
+          where: { userId },
+          data: { enabled: false },
+        })
+        await db.session.updateMany({
+          where: { userId },
+          data: {
+            rpcEnabled: false,
+            gamesRpcEnabled: false,
+            customStatus: null,
+            customStatusEmoji: null,
+            vrStatusActive: false,
+          },
+        })
+        await daemonStopUserRpc(userId)
+        await db.auditLog.create({
+          data: {
+            action: 'admin_reset_workspace',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
+        return NextResponse.json({ ok: true, message: `Workspace reset for ${targetUser.username}` })
+      }
+
       case 'delete-user': {
         // Cascade delete — removes sessions, rpcConfigs, trials, etc.
         await db.user.delete({ where: { id: userId } })
+        await db.auditLog.create({
+          data: {
+            action: 'admin_delete_user',
+            actor: session.userId,
+            target: userId,
+            metadata: JSON.stringify({ username: targetUser.username }),
+          },
+        })
         return NextResponse.json({ ok: true, message: 'User deleted' })
       }
 
       case 'apply-template': {
         const tpl = body.template
         if (!tpl?.name) {
-          return NextResponse.json({ error: 'missing template' }, { status: 400 })
+          return NextResponse.json({ ok: false, error: 'missing template' }, { status: 400 })
         }
         const existing = await db.rpcConfig.findFirst({ where: { userId } })
         const tplData = {
@@ -145,15 +325,15 @@ export async function POST(req: Request) {
         } else {
           await db.rpcConfig.create({ data: { userId, ...tplData } })
         }
-        // Sync daemon to push the new config
         await daemonSyncUser(userId)
         return NextResponse.json({ ok: true, message: `Template "${tpl.name}" applied` })
       }
 
       default:
-        return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+        return NextResponse.json({ ok: false, error: `unknown action: ${action}` }, { status: 400 })
     }
   } catch (e) {
+    console.error('admin/user-action error:', e)
     return NextResponse.json({
       ok: false,
       error: e instanceof Error ? e.message : 'unknown error',
