@@ -155,33 +155,41 @@ export function DashboardPage() {
         <QuickStats me={me} />
 
         {/* Profile section */}
-        <ProfileSection
-          me={liveRpcConfig ? { ...me, rpcConfig: { ...me.rpcConfig, ...liveRpcConfig } } : me}
-          onRefresh={refresh}
-        />
+        <div id="profile">
+          <ProfileSection
+            me={liveRpcConfig ? { ...me, rpcConfig: { ...me.rpcConfig, ...liveRpcConfig } } : me}
+            onRefresh={refresh}
+          />
+        </div>
 
         {/* Subscription panel */}
-        <SubscriptionPanel />
+        <div id="subscription">
+          <SubscriptionPanel />
+        </div>
 
         {/* Rich presence form (Normal RPC) */}
-        <RichPresenceForm
-          initial={me.rpcConfig}
-          rpcEnabled={me.session?.rpcEnabled ?? false}
-          onChange={setLiveRpcConfig}
-          onSaved={() => {
-            setLiveRpcConfig(null)
-            refresh()
-          }}
-          onToggle={() => refresh()}
-        />
+        <div id="rpc-settings">
+          <RichPresenceForm
+            initial={me.rpcConfig}
+            rpcEnabled={me.session?.rpcEnabled ?? false}
+            onChange={setLiveRpcConfig}
+            onSaved={() => {
+              setLiveRpcConfig(null)
+              refresh()
+            }}
+            onToggle={() => refresh()}
+          />
+        </div>
 
         {/* Games RPC (completely separate from Normal RPC) */}
-        <GamesRpcForm
-          initial={me.gameRpcConfig}
-          gamesRpcEnabled={me.session?.gamesRpcEnabled ?? false}
-          onSaved={() => refresh()}
-          onToggle={() => refresh()}
-        />
+        <div id="games-rpc">
+          <GamesRpcForm
+            initial={me.gameRpcConfig}
+            gamesRpcEnabled={me.session?.gamesRpcEnabled ?? false}
+            onSaved={() => refresh()}
+            onToggle={() => refresh()}
+          />
+        </div>
 
         {/* Footer */}
         <p className="text-xs text-white/30 text-center pt-4">

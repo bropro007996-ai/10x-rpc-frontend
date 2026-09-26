@@ -5,8 +5,7 @@ import { useRouter } from './useRouter'
 import {
   Home, LayoutDashboard, User, Settings, Shield, Activity,
   Receipt, LogOut, Menu, X, Server, Bell, CreditCard, Crown, Gamepad2,
-  Clock, Zap, RefreshCw, ExternalLink, Moon, Image, Palette, Sparkles,
-  TrendingUp, Gift, Heart, ChevronRight
+  Clock, Zap, RefreshCw, ExternalLink, ChevronRight
 } from 'lucide-react'
 
 interface NavMenuProps {
@@ -38,32 +37,23 @@ export function NavMenu({ isAdmin, onLogout }: NavMenuProps) {
       title: 'Main',
       items: [
         { label: 'Dashboard', icon: LayoutDashboard, route: { name: 'dashboard' as const } },
-        { label: 'Profile', icon: User, route: { name: 'profile' as const } },
+        { label: 'Profile', icon: User, scrollTarget: 'profile' },
       ],
     },
     {
       title: 'RPC & Status',
       items: [
-        { label: 'RPC Settings', icon: Settings, route: { name: 'config' as const } },
+        { label: 'RPC Settings', icon: Settings, scrollTarget: 'rpc-settings' },
         { label: 'Games RPC', icon: Gamepad2, scrollTarget: 'games-rpc' },
-        { label: 'Sleep Timer', icon: Moon, scrollTarget: 'sleep-timer' },
-        { label: 'Custom Status', icon: Sparkles, scrollTarget: 'custom-status' },
       ],
     },
     {
       title: 'Account',
       items: [
         { label: 'Subscription', icon: Crown, scrollTarget: 'subscription' },
-        { label: 'Payment History', icon: Receipt, scrollTarget: 'payment-history' },
-        { label: 'Activity Log', icon: Activity, scrollTarget: 'activity-log' },
-        { label: 'Notifications', icon: Bell, scrollTarget: 'notifications' },
-      ],
-    },
-    {
-      title: 'Personalization',
-      items: [
-        { label: 'Background', icon: Image, scrollTarget: 'background' },
-        { label: 'Weather', icon: Palette, scrollTarget: 'weather' },
+        { label: 'Payment History', icon: Receipt, href: '/dashboard' },
+        { label: 'Activity Log', icon: Activity, href: '/dashboard' },
+        { label: 'Notifications', icon: Bell, href: '/dashboard' },
       ],
     },
     {
