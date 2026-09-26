@@ -105,9 +105,7 @@ export function GamesPage() {
                         src={g.iconUrl}
                         alt={g.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
-                        }}
+                        onError={(e) => { e.currentTarget.src = '/game-icons/placeholder.png' }}
                       />
                     ) : null}
                     <div className="absolute inset-0 purple-gradient -z-10 flex items-center justify-center text-xs font-bold text-white select-none">

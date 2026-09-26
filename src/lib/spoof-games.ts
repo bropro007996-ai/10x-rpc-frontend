@@ -43,7 +43,7 @@ export const SPOOF_GAMES: SpoofGame[] = [
     slug: 'wuthering_waves',
     app_id: '1247227126416146462',
     name: 'Wuthering Waves',
-    img: 'https://cdn.discordapp.com/app-icons/1247227126416146462/c7bb04bdddaa82cf045b02df7168365e.png?size=240&keep_aspect_ratio=false',
+    img: '/game-icons/wuthering-waves.png',
     defaultState: 'Echo hunting',
     defaultDetails: 'Union Level 40',
     defaultPartyMax: 4,

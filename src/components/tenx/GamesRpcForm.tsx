@@ -205,6 +205,7 @@ export function GamesRpcForm({
                     src={selectedGame.img}
                     alt=""
                     className="w-8 h-8 rounded-lg object-cover shrink-0"
+                    onError={(e) => { e.currentTarget.src = '/game-icons/placeholder.png' }}
                   />
                   <span className="truncate">{selectedGame.name}</span>
                 </span>
@@ -248,6 +249,7 @@ export function GamesRpcForm({
                           src={g.img}
                           alt=""
                           className="w-8 h-8 rounded-lg object-cover shrink-0"
+                          onError={(e) => { e.currentTarget.src = '/game-icons/placeholder.png' }}
                         />
                         <span className="truncate">{g.name}</span>
                       </button>

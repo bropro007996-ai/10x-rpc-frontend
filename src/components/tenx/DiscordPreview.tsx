@@ -152,6 +152,7 @@ export function DiscordPreview({ config, username, avatarUrl, platform, rpcEnabl
                     alt={largeText}
                     title={largeText}
                     className="w-14 h-14 rounded-xl object-cover border border-white/10"
+                    onError={(e) => { e.currentTarget.src = '/game-icons/placeholder.png' }}
                   />
                 ) : (
                   <div
@@ -170,7 +171,7 @@ export function DiscordPreview({ config, username, avatarUrl, platform, rpcEnabl
               {smallImage && (
                 <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-[#121319] overflow-hidden bg-[#1c1d25] flex items-center justify-center text-[10px]">
                   {isUrl(smallImage) ? (
-                    <img src={smallImage} alt={smallText} title={smallText} className="w-full h-full object-cover" />
+                    <img src={smallImage} alt={smallText} title={smallText} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                   ) : (
                     <span title={smallText}>⭐</span>
                   )}
