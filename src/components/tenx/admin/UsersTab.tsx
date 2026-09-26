@@ -375,7 +375,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
                   setExpandedUser(expandedUser === u.id ? null : u.id)
                   setGrantUserId(u.id)
                 }}
-                onAction={handleUserAction}
+                onAction={(action, data) => handleUserAction(u.id, action, data)}
                 onCopyId={() => { navigator.clipboard.writeText(u.id); toast.success('User ID copied') }}
                 onToggleSelect={() => toggleSelect(u.id)}
                 busy={busy}
