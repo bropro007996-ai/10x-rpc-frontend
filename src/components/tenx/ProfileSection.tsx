@@ -446,16 +446,25 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
               value={customEmoji}
               onChange={(emoji) => {
                 setCustomEmoji(emoji)
-                // Auto-save if status is already enabled
-                if (statusEnabled) {
-                  api.statusUpdate({ customStatusEmoji: emoji, customStatus: customMsg || null, userStatus, statusPlatform: selectedPlatform }).then(() => onRefresh()).catch(() => {})
-                }
+                // Always save to DB — the backend decides whether to sync to Discord
+                // (only syncs if statusEnabled is true). This ensures the emoji
+                // persists even when status is OFF.
+                api.statusUpdate({
+                  customStatusEmoji: emoji,
+                  customStatus: customMsg || null,
+                  userStatus,
+                  statusPlatform: selectedPlatform,
+                }).then(() => onRefresh()).catch(() => {})
               }}
               onClear={() => {
                 setCustomEmoji('')
-                if (statusEnabled) {
-                  api.statusUpdate({ customStatusEmoji: null, customStatus: customMsg || null, userStatus, statusPlatform: selectedPlatform }).then(() => onRefresh()).catch(() => {})
-                }
+                // Always clear in DB too
+                api.statusUpdate({
+                  customStatusEmoji: null,
+                  customStatus: customMsg || null,
+                  userStatus,
+                  statusPlatform: selectedPlatform,
+                }).then(() => onRefresh()).catch(() => {})
               }}
               open={emojiPickerOpen}
               onClose={() => setEmojiPickerOpen(false)}
@@ -487,6 +496,14 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
           <p className="text-xs sm:text-sm font-semibold tracking-widest text-white/50 uppercase">
             {statusEnabled ? (userStatus.toUpperCase() || 'ONLINE') : 'OFFLINE'}
           </p>
+
+          {/* Custom Status display — shows the saved emoji + text below the status line */}
+          {(customEmoji || customMsg) && (
+            <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 bg-white/5 border border-white/10 rounded-full">
+              {customEmoji && <span className="text-sm">{customEmoji}</span>}
+              {customMsg && <span className="text-xs text-white/70 truncate max-w-[200px]">{customMsg}</span>}
+            </div>
+          )}
 
           {/* Trial Countdown — thin progress bar */}
           {isTrial && (
