@@ -46,10 +46,10 @@ export async function GET() {
       discordId: u.discordId,
       username: u.username,
       avatar: avatarUrl({ id: u.discordId, avatar: u.avatar, discriminator: u.discriminator || '0' }),
-      createdAt: u.createdAt,
+      createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : String(u.createdAt),
       trial: trial ? {
         active: trial.active && trial.endsAt > now,
-        endsAt: trial.endsAt,
+        endsAt: trial.endsAt instanceof Date ? trial.endsAt.toISOString() : null,
         daysLeft: Math.max(0, Math.ceil((trial.endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))),
       } : null,
       rpc: s ? {
@@ -60,9 +60,9 @@ export async function GET() {
         customStatusEmoji: s.customStatusEmoji,
         vrStatusActive: s.vrStatusActive,
         hasDiscordToken: !!s.discordAccessToken,
-        lastPresenceUpdate: s.lastPresenceUpdate,
+        lastPresenceUpdate: s.lastPresenceUpdate instanceof Date ? s.lastPresenceUpdate.toISOString() : null,
         sleepTimerActive: s.sleepTimerActive && s.sleepTimerEndsAt && s.sleepTimerEndsAt > now,
-        sleepTimerEndsAt: s.sleepTimerEndsAt,
+        sleepTimerEndsAt: s.sleepTimerEndsAt instanceof Date ? s.sleepTimerEndsAt.toISOString() : null,
       } : null,
       rpcConfig: rpc ? {
         name: rpc.name,
@@ -77,7 +77,7 @@ export async function GET() {
       subscription: sub ? {
         plan: sub.plan,
         status: sub.status,
-        endsAt: sub.endsAt,
+        endsAt: sub.endsAt instanceof Date ? sub.endsAt.toISOString() : String(sub.endsAt),
         daysLeft: Math.max(0, Math.ceil((sub.endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))),
         amountPaid: sub.amountPaid,
         currency: sub.currency,
