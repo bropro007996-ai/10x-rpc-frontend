@@ -93,8 +93,18 @@ export function PaymentFlow({ plan, onSuccess, onCancel, onBack }: PaymentFlowPr
       // Step 1: Server creates the Razorpay order (amount comes from DB — never trusted from frontend).
       const orderRes = await api.razorpayCreateOrder(plan.id)
       if (!orderRes.ok || !orderRes.orderId) {
-        toast.error(orderRes.error || 'Failed to create payment order')
-        setErrorMessage(orderRes.error || 'Failed to create payment order')
+        // Map raw error codes to user-friendly messages.
+        const friendlyError: Record<string, string> = {
+          already_subscribed: 'You already have an active subscription. You can extend it from the dashboard.',
+          razorpay_not_configured: 'Payment system is not configured. Please contact support.',
+          not_authenticated: 'Please log in to continue.',
+          'invalid plan': 'Please select a valid plan.',
+          'invalid or inactive plan': 'This plan is no longer available. Please choose another.',
+        }
+        const rawError = orderRes.error || 'Failed to create payment order'
+        const msg = friendlyError[rawError] || rawError
+        toast.error(msg)
+        setErrorMessage(msg)
         return
       }
       setOrderId(orderRes.orderId)

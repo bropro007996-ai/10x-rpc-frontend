@@ -88,7 +88,6 @@ export async function POST(req: Request) {
         data: {
           status: 'captured',
           razorpayPaymentId,
-          razorpaySignature: signature,
           verifiedAt: new Date(),
         },
       })
