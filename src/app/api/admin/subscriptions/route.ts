@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
 import { Prisma } from '@prisma/client'
+import { syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,26 @@ export async function GET(req: Request) {
   }
 
   try {
+    // ─────────────────────────────────────────────────────────────────────
+    // CRITICAL: Run syncSubscriptionState for ALL users with subscriptions
+    // BEFORE returning the list. This ensures the admin sees the REAL,
+    // up-to-date status — expired subscriptions are suspended, grace-period-
+    // ended subscriptions are expired. Without this, the admin panel would
+    // show stale DB status (e.g. 'active' for an already-expired subscription
+    // that hasn't been processed by the cron yet).
+    // ─────────────────────────────────────────────────────────────────────
+    const allSubs = await db.subscription.findMany({
+      where: { status: { in: ['active', 'expiring_soon', 'suspended', 'cancelled'] } },
+      select: { userId: true },
+    })
+    for (const s of allSubs) {
+      try {
+        await syncSubscriptionState(s.userId)
+      } catch (e) {
+        console.error(`admin/subscriptions: syncSubscriptionState failed for ${s.userId}:`, e)
+      }
+    }
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status') || undefined
     const search = searchParams.get('search')?.trim() || undefined
@@ -46,8 +67,7 @@ export async function GET(req: Request) {
           where.endsAt = { gt: now, lte: soonThreshold }
           break
         case 'suspended':
-          // Treat "suspended" as an alias for the stored "cancelled" state
-          where.status = { in: ['suspended', 'cancelled'] }
+          where.status = 'suspended'
           break
         case 'active':
         case 'expired':
@@ -98,6 +118,9 @@ export async function GET(req: Request) {
       subscriptions: subscriptions.map(s => {
         const msLeft = s.endsAt.getTime() - now.getTime()
         const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)))
+        const inGracePeriod = s.status === 'suspended' && !!s.gracePeriodEnd && s.gracePeriodEnd > now
+        const graceMsLeft = s.gracePeriodEnd ? s.gracePeriodEnd.getTime() - now.getTime() : 0
+        const graceDaysLeft = Math.max(0, Math.ceil(graceMsLeft / (24 * 60 * 60 * 1000)))
         return {
           id: s.id,
           userId: s.userId,
@@ -110,6 +133,10 @@ export async function GET(req: Request) {
           endsAt: s.endsAt.toISOString(),
           daysLeft,
           autoRenew: s.autoRenew,
+          suspendedAt: s.suspendedAt instanceof Date ? s.suspendedAt.toISOString() : null,
+          gracePeriodEnd: s.gracePeriodEnd instanceof Date ? s.gracePeriodEnd.toISOString() : null,
+          inGracePeriod,
+          graceDaysLeft,
           createdAt: s.createdAt.toISOString(),
           updatedAt: s.updatedAt.toISOString(),
           user: s.user

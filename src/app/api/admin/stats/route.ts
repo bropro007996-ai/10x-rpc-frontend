@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
+import { syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,12 +18,32 @@ export async function GET() {
 
   const now = new Date()
 
-  const [totalUsers, activeSubs, allSubs, trialUsers, expiredSubs, dbPlans] = await Promise.all([
+  // ─────────────────────────────────────────────────────────────────────
+  // CRITICAL: Sync ALL subscriptions BEFORE counting. This ensures the
+  // stats reflect the REAL, up-to-date state — expired subscriptions are
+  // suspended, grace-period-ended subscriptions are expired. Without this,
+  // the admin overview would show stale counts (e.g. 'active' count includes
+  // subscriptions that have already expired but haven't been processed).
+  // ─────────────────────────────────────────────────────────────────────
+  const allSubsForSync = await db.subscription.findMany({
+    where: { status: { in: ['active', 'expiring_soon', 'suspended', 'cancelled'] } },
+    select: { userId: true },
+  })
+  for (const s of allSubsForSync) {
+    try {
+      await syncSubscriptionState(s.userId)
+    } catch (e) {
+      console.error(`admin/stats: syncSubscriptionState failed for ${s.userId}:`, e)
+    }
+  }
+
+  const [totalUsers, activeSubs, allSubs, trialUsers, expiredSubs, suspendedSubs, dbPlans] = await Promise.all([
     db.user.count(),
     db.subscription.count({ where: { status: 'active', endsAt: { gt: now } } }),
     db.subscription.findMany({ where: { status: 'active', endsAt: { gt: now } }, select: { plan: true, amountPaid: true } }),
     db.trial.count({ where: { active: true, endsAt: { gt: now } } }),
-    db.subscription.count({ where: { status: { in: ['expired', 'cancelled'] } } }),
+    db.subscription.count({ where: { status: 'expired' } }),
+    db.subscription.count({ where: { status: 'suspended' } }),
     db.plan.findMany({ where: { isArchived: false }, orderBy: { displayOrder: 'asc' } }),
   ])
 
@@ -43,6 +64,7 @@ export async function GET() {
       totalRevenue,
       trialUsers,
       expiredSubs,
+      suspendedSubs,
       planBreakdown,
       plans: dbPlans.map(p => ({
         id: p.id,

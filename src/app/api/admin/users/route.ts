@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
 import { avatarUrl } from '@/lib/discord-oauth'
+import { syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,23 @@ export async function GET() {
 
   if (!isAdmin(session.user.discordId)) {
     return NextResponse.json({ error: 'forbidden', message: 'Admin access required' }, { status: 403 })
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // CRITICAL: Run syncSubscriptionState for ALL users BEFORE reading their
+  // data. This ensures the admin sees the REAL, up-to-date subscription
+  // status — expired subscriptions are suspended, grace-period-ended
+  // subscriptions are expired, etc. Without this, the admin panel would
+  // show stale DB status (e.g. 'active' for a subscription whose endsAt
+  // has already passed but hasn't been processed by the cron yet).
+  // ─────────────────────────────────────────────────────────────────────
+  const allUsers = await db.user.findMany({ select: { id: true } })
+  for (const u of allUsers) {
+    try {
+      await syncSubscriptionState(u.id)
+    } catch (e) {
+      console.error(`admin/users: syncSubscriptionState failed for ${u.id}:`, e)
+    }
   }
 
   const users = await db.user.findMany({
