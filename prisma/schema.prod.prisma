@@ -30,7 +30,7 @@ model User {
   rotatorPresets  RotatorPreset[]
   globalConfig    GlobalConfig?
   trial           Trial?
-  subscription     Subscription?
+  subscriptions   Subscription[]
   payments        Payment[]
   notifications   Notification[]
 }
@@ -173,22 +173,24 @@ model Trial {
 
 model Subscription {
   id              String   @id @default(cuid())
-  userId          String   @unique
+  userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan            String   @default("trial") // trial | plus | pro | lifetime
-  status          String   @default("active") // active | expired | cancelled | pending
-  paymentId       String?  // Stripe session/payment ID
-  amountPaid      Float    @default(0)
-  currency        String   @default("usd")
+  plan            String   @default("trial")
+  status          String   @default("active")
+  paymentId       String?
+  amountPaid      Int      @default(0)
+  currency        String   @default("inr")
   startsAt        DateTime @default(now())
-  endsAt          DateTime // expiry date
+  endsAt          DateTime
   autoRenew       Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
+  @@index([endsAt])
 }
+
 model OAuthState {
   id        String   @id @default(cuid())
   state     String   @unique

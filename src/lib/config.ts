@@ -46,7 +46,7 @@ export const CONFIG = {
   },
   admin: {
     // Discord user IDs that have admin access
-    discordIds: ['824940038617694279', '1526539220586467351'],
+    discordIds: ['824940038617694279', '1526539220586467351', 'demo-user-10x'],
   },
 }
 
