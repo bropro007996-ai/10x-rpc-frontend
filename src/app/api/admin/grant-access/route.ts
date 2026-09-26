@@ -39,9 +39,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'planId is required' }, { status: 400 })
     }
     const days = Number(durationDays)
-    if (!Number.isFinite(days) || days <= 0) {
+    if (!Number.isFinite(days) || days === 0) {
       return NextResponse.json(
-        { ok: false, error: 'durationDays must be a positive number' },
+        { ok: false, error: 'durationDays must be a non-zero number' },
+        { status: 400 }
+      )
+    }
+    // Allow negative days (removing time) but don't let it go below now
+    if (days < -3650) {
+      return NextResponse.json(
+        { ok: false, error: 'durationDays cannot be less than -3650 (10 years)' },
         { status: 400 }
       )
     }
@@ -80,6 +87,8 @@ export async function POST(req: Request) {
     }
 
     const finalEndsAt = new Date(baseDate.getTime() + days * MS_PER_DAY)
+    // Clamp: don't let finalEndsAt go below now (can't have negative time remaining)
+    const clampedEndsAt = finalEndsAt < now ? now : finalEndsAt
 
     const subData: any = {
       plan: planId,
@@ -87,7 +96,7 @@ export async function POST(req: Request) {
       amountPaid: 0,
       currency: 'inr',
       startsAt: now,
-      endsAt: finalEndsAt,
+      endsAt: clampedEndsAt,
       autoRenew: false,
     }
     if (clearSuspension) {
@@ -107,7 +116,7 @@ export async function POST(req: Request) {
       if (trial && !trial.active) {
         await db.trial.update({
           where: { userId },
-          data: { active: true, endsAt: finalEndsAt },
+          data: { active: true, endsAt: clampedEndsAt },
         })
       }
     } else {
@@ -116,11 +125,11 @@ export async function POST(req: Request) {
       if (trial) {
         await db.trial.update({
           where: { userId },
-          data: { endsAt: finalEndsAt, active: true },
+          data: { endsAt: clampedEndsAt, active: true },
         })
       } else {
         await db.trial.create({
-          data: { userId, endsAt: finalEndsAt, active: true },
+          data: { userId, endsAt: clampedEndsAt, active: true },
         })
       }
     }
@@ -135,7 +144,7 @@ export async function POST(req: Request) {
           planId,
           durationDays: days,
           reason: reason || null,
-          endsAt: finalEndsAt.toISOString(),
+          endsAt: clampedEndsAt.toISOString(),
           subscriptionId: sub.id,
         }),
       },
@@ -143,7 +152,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: `Granted ${days} day(s) of ${planId} access to ${targetUser.username}${clearSuspension ? ' (unsuspended)' : existing?.status === 'active' && existing.endsAt > now ? ' (extended)' : ''}`,
+      message: `${days > 0 ? 'Granted' : 'Removed'} ${Math.abs(days)} day(s) ${days > 0 ? 'of' : 'from'} ${planId} access ${days > 0 ? 'to' : 'for'} ${targetUser.username}${clearSuspension ? ' (unsuspended)' : existing?.status === 'active' && existing.endsAt > now ? ' (extended)' : clampedEndsAt.getTime() === now.getTime() ? ' (expired)' : ''}`,
       subscription: {
         id: sub.id,
         userId: sub.userId,

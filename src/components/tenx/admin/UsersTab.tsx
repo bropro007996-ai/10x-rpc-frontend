@@ -424,12 +424,21 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
               {busy ? '...' : 'Grant'}
             </button>
           </div>
-          {/* Quick extend buttons */}
-          <div className="flex gap-1.5 mt-2">
-            <button onClick={() => setGrantDays(7)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+7d</button>
-            <button onClick={() => setGrantDays(30)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+30d</button>
-            <button onClick={() => setGrantDays(90)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+90d</button>
-            <button onClick={() => setGrantDays(365)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+1yr</button>
+          {/* Quick add days buttons */}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="text-[9px] text-green-400 font-bold uppercase mr-1 self-center">Add:</span>
+            <button onClick={() => setGrantDays(7)} className="text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg text-green-300 hover:bg-green-500/20">+7d</button>
+            <button onClick={() => setGrantDays(30)} className="text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg text-green-300 hover:bg-green-500/20">+30d</button>
+            <button onClick={() => setGrantDays(90)} className="text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg text-green-300 hover:bg-green-500/20">+90d</button>
+            <button onClick={() => setGrantDays(365)} className="text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg text-green-300 hover:bg-green-500/20">+1yr</button>
+          </div>
+          {/* Quick remove days buttons */}
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            <span className="text-[9px] text-red-400 font-bold uppercase mr-1 self-center">Remove:</span>
+            <button onClick={() => setGrantDays(-7)} className="text-[10px] bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300 hover:bg-red-500/20">-7d</button>
+            <button onClick={() => setGrantDays(-30)} className="text-[10px] bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300 hover:bg-red-500/20">-30d</button>
+            <button onClick={() => setGrantDays(-90)} className="text-[10px] bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300 hover:bg-red-500/20">-90d</button>
+            <button onClick={() => setGrantDays(-365)} className="text-[10px] bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-lg text-red-300 hover:bg-red-500/20">-1yr</button>
           </div>
         </AdminCard>
       )}
