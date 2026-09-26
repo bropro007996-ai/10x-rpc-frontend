@@ -3,7 +3,7 @@
 // Features smart positioning: opens upward if space available, otherwise
 // flips downward to avoid viewport clipping.
 'use client'
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback, type CSSProperties } from 'react'
 import { Search, X, Clock } from 'lucide-react'
 
 // === Emoji categories ===
@@ -149,17 +149,15 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
     if (typeof window === 'undefined') return []
     return loadRecents()
   })
-  // placement: 'up' = opens above the button, 'down' = opens below.
-  // Computed once when the picker opens, using a callback ref that measures
-  // the trigger button's position before the popup is painted.
-  const [placement, setPlacement] = useState<'up' | 'down'>('up')
+  // Fixed position coordinates for the popup (escapes parent overflow:hidden)
+  const [popupStyle, setPopupStyle] = useState<CSSProperties>({ visibility: 'hidden' })
   const pickerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Callback ref: runs AFTER the popup div is mounted but BEFORE the browser
-  // paints. This lets us measure available space and set placement without
-  // a visible flicker.
-  const measureAndSetPlacement = useCallback((node: HTMLDivElement | null) => {
+  // Callback ref: runs AFTER the popup div is mounted. We compute the
+  // trigger button's screen position and set fixed coordinates so the
+  // popup escapes any parent `overflow: hidden` constraints.
+  const setPopupPosition = useCallback((node: HTMLDivElement | null) => {
     pickerRef.current = node
     if (!node || !open) return
     // Find the trigger button (the emoji button that opened this picker)
@@ -167,14 +165,56 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
     let trigger: HTMLElement | null = null
     while (parent && !trigger) {
       trigger = parent.querySelector('button')
-      if (trigger) break
+      if (trigger && trigger !== node) break
+      trigger = null
       parent = parent.parentElement
     }
     if (!trigger) return
+
     const triggerRect = trigger.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
+    const pickerWidth = 320
+    const pickerHeight = 360 // approximate max height
+    const margin = 8
+
+    // Decide: open upward or downward?
     const spaceAbove = triggerRect.top
-    const pickerHeight = 360 // approximate max height of the picker
-    setPlacement(spaceAbove < pickerHeight ? 'down' : 'up')
+    const spaceBelow = viewportHeight - triggerRect.bottom
+    const openUpward = spaceAbove > pickerHeight + margin || spaceAbove > spaceBelow
+
+    // Calculate top position
+    let top: number
+    if (openUpward) {
+      // Popup bottom edge = trigger top - margin
+      top = triggerRect.top - pickerHeight - margin
+      // Clamp to viewport
+      if (top < margin) top = margin
+    } else {
+      // Popup top edge = trigger bottom + margin
+      top = triggerRect.bottom + margin
+      // Clamp to viewport
+      if (top + pickerHeight > viewportHeight - margin) {
+        top = viewportHeight - pickerHeight - margin
+      }
+    }
+
+    // Horizontal: align right edge of popup with right edge of trigger
+    // (matches the original `sm:right-0` behavior)
+    let left = triggerRect.right - pickerWidth
+    // Clamp to viewport
+    if (left < margin) left = margin
+    if (left + pickerWidth > viewportWidth - margin) {
+      left = viewportWidth - pickerWidth - margin
+    }
+
+    setPopupStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      visibility: 'visible',
+      zIndex: 9999,
+    })
   }, [open])
 
   // Focus search when opened
@@ -250,8 +290,9 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
       />
 
       <div
-        ref={measureAndSetPlacement}
-        className={`absolute z-50 ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 sm:left-auto sm:right-0 w-[320px] max-w-[calc(100vw-2rem)] bg-[#181922]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150`}
+        ref={setPopupPosition}
+        style={popupStyle}
+        className="w-[320px] max-w-[calc(100vw-2rem)] bg-[#181922]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
       >
         {/* Header with search */}
         <div className="p-3 border-b border-white/10">
