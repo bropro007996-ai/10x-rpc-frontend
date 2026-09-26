@@ -173,7 +173,7 @@ model Trial {
 
 model Subscription {
   id              String   @id @default(cuid())
-  userId          String
+  userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan            String   @default("trial")
   status          String   @default("active")
