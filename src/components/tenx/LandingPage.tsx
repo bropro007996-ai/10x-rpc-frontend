@@ -38,7 +38,7 @@ export function LandingPage() {
       {/* Nav */}
       <nav className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-6">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl purple-gradient flex items-center justify-center font-black text-white">10</div>
+          <img src="/logo.png" alt="10X RPC" className="w-9 h-9 rounded-xl object-cover" />
           <span className="text-lg sm:text-xl font-bold text-white">10X RPC</span>
         </div>
         <div className="flex items-center gap-2">

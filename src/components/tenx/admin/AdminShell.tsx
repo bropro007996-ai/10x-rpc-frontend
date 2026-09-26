@@ -194,9 +194,7 @@ export function AdminShell({ refreshKey, onRefresh, refreshing, autoRefresh, onT
             </button>
             <BackButton onClick={() => navigate({ name: 'dashboard' })} />
             <div className="flex items-center gap-1.5 min-w-0">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg purple-gradient flex items-center justify-center flex-shrink-0">
-                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-              </div>
+              <img src="/logo.png" alt="10X RPC" className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover flex-shrink-0" />
               <h1 className="text-base sm:text-2xl font-bold text-white truncate">Admin</h1>
             </div>
           </div>
@@ -332,9 +330,7 @@ export function AdminShell({ refreshKey, onRefresh, refreshing, autoRefresh, onT
               {/* Drawer header */}
               <div className="sticky top-0 bg-[#0a0b10]/95 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg purple-gradient flex items-center justify-center">
-                    <Shield className="w-3.5 h-3.5 text-white" />
-                  </div>
+                  <img src="/logo.png" alt="10X RPC" className="w-7 h-7 rounded-lg object-cover" />
                   <span className="text-sm font-bold text-white">Admin Menu</span>
                 </div>
                 <button

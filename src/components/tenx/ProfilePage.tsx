@@ -61,7 +61,7 @@ export function ProfilePage({ initial }: { initial?: Me }) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md text-center">
-          <div className="w-14 h-14 rounded-2xl purple-gradient flex items-center justify-center font-black text-white mx-auto mb-4">10</div>
+          <img src="/logo.png" alt="10X RPC" className="w-14 h-14 rounded-2xl object-cover mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-white mb-2">Sign in Required</h1>
           <p className="text-sm text-white/60 mb-6">Sign in with Discord to view your profile.</p>
           <PrimaryButton onClick={() => navigate({ name: 'oauth-consent' })}>Sign in with Discord</PrimaryButton>
