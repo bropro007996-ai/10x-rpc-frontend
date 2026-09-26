@@ -4,7 +4,7 @@
 // This prevents price manipulation attacks.
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
-import { getRazorpay, RAZORPAY_ENABLED } from '@/lib/subscription'
+import { getRazorpay, RAZORPAY_ENABLED, syncSubscriptionState } from '@/lib/subscription'
 import { getEffectivePlanPrice } from '@/lib/pricing'
 import { db } from '@/lib/db'
 
@@ -35,14 +35,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid or inactive plan' }, { status: 400 })
   }
 
-  // Block purchase if user already has an active subscription
-  const existingSub = await db.subscription.findUnique({ where: { userId: session.userId } })
-  if (existingSub && existingSub.status === 'active' && existingSub.endsAt > new Date()) {
-    return NextResponse.json({
-      error: 'already_subscribed',
-      message: 'You already have an active subscription. It will be extended when you purchase again.',
-    }, { status: 409 })
+  // Run on-demand subscription sync so the user's status is up-to-date.
+  // This ensures that if the user's subscription just expired, they are
+  // suspended BEFORE we check their state — so the renewal flow works
+  // correctly (suspended users CAN purchase to reactivate).
+  try {
+    await syncSubscriptionState(session.userId)
+  } catch (e) {
+    console.error('syncSubscriptionState error in create-order (non-fatal):', e)
   }
+
+  // NOTE: We do NOT block users who already have an active subscription.
+  // Users are ALLOWED to purchase again at any time — whether to:
+  //   - Extend an active subscription (adds days to the current end date)
+  //   - Renew a suspended subscription (reactivates + restores workspace)
+  //   - Reactivate an expired subscription (fresh start)
+  // The activatePlan() function handles all these cases correctly by
+  // extending from the existing endsAt if still active, or from now otherwise.
 
   const rzp = getRazorpay()!
 
