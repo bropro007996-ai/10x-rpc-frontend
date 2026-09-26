@@ -64,3 +64,5 @@ tool-results/
 
 # Upload folder (user screenshots)
 upload/
+*.bak
+src/lib/config.ts.bak
