@@ -1,8 +1,11 @@
 // 10X RPC — Grace period full-screen page (shown when subscription is expired but workspace is still preserved)
+// Includes the SubscriptionPanel inline so users can renew WITHOUT leaving the page.
+// (Previously, "Renew Now" navigated to the dashboard, which showed this page again — infinite loop.)
 'use client'
 import { useEffect, useState } from 'react'
-import { Clock, AlertTriangle, Gift, Crown, Eye, ExternalLink, Power } from 'lucide-react'
+import { Clock, AlertTriangle, Gift, Crown, ExternalLink, Power, ChevronDown, ChevronUp } from 'lucide-react'
 import { useRouter } from './useRouter'
+import { SubscriptionPanel } from './SubscriptionPanel'
 
 interface GracePeriodPageProps {
   /** ISO date string marking when the subscription expired (grace = expiry + 7 days). */
@@ -36,6 +39,7 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
   // Grace period ends 7 days after the subscription expired.
   const graceEndMs = new Date(expiresAt).getTime() + GRACE_PERIOD_MS
   const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => getTimeLeft(graceEndMs))
+  const [showPlans, setShowPlans] = useState(false)
 
   useEffect(() => {
     const tick = () => setTimeLeft(getTimeLeft(graceEndMs))
@@ -44,18 +48,14 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
     return () => clearInterval(t)
   }, [graceEndMs])
 
-  /** "Renew Now" — go straight back to the dashboard. */
+  /** "Renew Now" — show the plans panel inline (no navigation, no infinite loop). */
   const renewNow = () => {
-    navigate({ name: 'dashboard' })
-  }
-
-  /** "View Plans" — go to dashboard then smooth-scroll to the SubscriptionPanel. */
-  const viewPlans = () => {
-    navigate({ name: 'dashboard' })
+    setShowPlans(true)
+    // Smooth-scroll to the plans section after it renders
     setTimeout(() => {
-      const el = document.getElementById('subscription')
+      const el = document.getElementById('renew-plans')
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 220)
+    }, 100)
   }
 
   const units = [
@@ -66,14 +66,14 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
   ]
 
   return (
-    <div className="min-h-screen w-full bg-[#0a0b10] text-white flex items-center justify-center px-4 py-10 relative overflow-hidden">
+    <div className="min-h-screen w-full bg-[#0a0b10] text-white px-4 py-10 relative overflow-hidden">
       {/* Ambient background glow */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[640px] h-[640px] bg-purple-900/15 rounded-full blur-3xl" />
         <div className="absolute -bottom-32 left-1/4 w-[420px] h-[420px] bg-red-900/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl">
+      <div className="relative z-10 w-full max-w-2xl mx-auto">
         {/* Suspended badge */}
         <div className="flex justify-center mb-6 animate-in fade-in-0 duration-500">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-bold uppercase tracking-wider">
@@ -165,13 +165,27 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
           </button>
           <button
             type="button"
-            onClick={viewPlans}
+            onClick={() => setShowPlans(!showPlans)}
             className="bg-white/5 border border-white/10 text-white font-semibold rounded-xl px-4 py-3.5 hover:bg-white/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
-            <Eye className="w-4 h-4" />
-            View Plans
+            {showPlans ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {showPlans ? 'Hide Plans' : 'View Plans'}
           </button>
         </div>
+
+        {/* === INLINE SUBSCRIPTION PANEL === */}
+        {/* This is the critical fix — the plans are shown DIRECTLY on the grace
+            period page so users can renew without navigating away (which would
+            just show this page again in an infinite loop). */}
+        {showPlans && (
+          <div id="renew-plans" className="mb-5 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <p className="text-sm font-semibold text-white">Choose a plan to renew</p>
+            </div>
+            <SubscriptionPanel />
+          </div>
+        )}
 
         {/* Discord / Support link — purple theme to match the dashboard */}
         <a
