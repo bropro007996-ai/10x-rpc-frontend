@@ -8,7 +8,7 @@ import { db } from '@/lib/db'
 import { daemonSyncUser, daemonStopUserRpc } from '@/lib/daemon-bridge'
 import { findSpoofGame } from '@/lib/spoof-games'
 import { logActivity } from '@/lib/activity/logger'
-import { getSubscriptionStatus } from '@/lib/subscription'
+import { checkFeatureAccess } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -23,28 +23,19 @@ export async function POST(req: Request) {
     const body = await req.json() as { enabled?: boolean }
     const enabled = !!body.enabled
 
-    // BLOCK Games RPC for suspended users
+    // BLOCK Games RPC for suspended/expired users (on-demand expiry detection).
     if (enabled) {
-      const subStatus = await getSubscriptionStatus(session.userId)
-      if (!subStatus.active && !subStatus.isTrial) {
+      const access = await checkFeatureAccess(session.userId)
+      if (!access.allowed) {
         return NextResponse.json(
-          { ok: false, error: 'subscription_suspended', message: 'Your subscription is suspended. Please renew to restore RPC access.' },
+          { ok: false, error: 'subscription_suspended', message: access.reason },
           { status: 403 }
         )
       }
     }
 
     if (enabled) {
-      // 1. Check trial
-      const trial = await db.trial.findUnique({ where: { userId: session.userId } })
-      if (!trial || !trial.active || trial.endsAt < new Date()) {
-        return NextResponse.json(
-          { ok: false, error: 'trial_expired', message: 'Your trial has expired.' },
-          { status: 403 }
-        )
-      }
-
-      // 2. MUTUAL EXCLUSIVITY: Disable Normal RPC if it's currently enabled
+      // 1. MUTUAL EXCLUSIVITY: Disable Normal RPC if it's currently enabled
       const currentSession = await db.session.findFirst({ where: { userId: session.userId } })
       const normalRpcWasEnabled = currentSession?.rpcEnabled ?? false
 

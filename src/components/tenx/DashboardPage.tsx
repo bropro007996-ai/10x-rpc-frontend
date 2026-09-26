@@ -46,8 +46,10 @@ export function DashboardPage() {
 
   useEffect(() => {
     refresh()
-    // Keep-alive: refresh session every 4 minutes + ping keep-awake endpoint
-    const t = setInterval(refresh, 4 * 60 * 1000)
+    // Keep-alive: refresh session every 60 seconds so on-demand expiry
+    // detection (syncSubscriptionState) fires promptly when a subscription
+    // reaches its exact expiry timestamp while the page is open.
+    const t = setInterval(refresh, 60 * 1000)
     // Also ping the keep-awake endpoint every 10 minutes to prevent Render sleep
     const awake = setInterval(() => {
       fetch('/api/keep-awake').catch(() => {})
@@ -128,9 +130,13 @@ export function DashboardPage() {
     )
   }
 
-  // Check if subscription is suspended (show grace period page)
-  if (me?.subscription && !me.subscription.active && me.subscription.endsAt && me.subscription.plan !== 'trial') {
-    return <GracePeriodPage expiresAt={me.subscription.endsAt} />
+  // Check if subscription is suspended (show grace period page).
+  // This applies to ALL plan types — trial, monthly, 2-month, custom — because
+  // the backend folds expired trials into the same suspension lifecycle.
+  // The backend (syncSubscriptionState) has already transitioned the status
+  // to 'suspended' on-demand at the exact expiry timestamp.
+  if (me?.subscription && me.subscription.status === 'suspended' && me.subscription.inGracePeriod) {
+    return <GracePeriodPage expiresAt={me.subscription.endsAt!} />
   }
 
   return (

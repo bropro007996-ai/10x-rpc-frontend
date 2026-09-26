@@ -178,6 +178,29 @@ export async function POST(req: Request) {
             data: { userId, endsAt: newEnd, active: true },
           })
         }
+        // If the user was suspended because their trial expired (folded into a
+        // suspended Subscription with plan='trial'), clear the suspension so
+        // the extended trial grants access again.
+        const sub = await db.subscription.findUnique({ where: { userId } })
+        if (sub && (sub.status === 'suspended' || sub.status === 'expired') && sub.plan === 'trial') {
+          await db.subscription.update({
+            where: { userId },
+            data: {
+              status: 'active',
+              endsAt: newEnd,
+              suspendedAt: null,
+              gracePeriodEnd: null,
+            },
+          })
+          await db.auditLog.create({
+            data: {
+              action: 'admin_trial_reactivated',
+              actor: session.userId,
+              target: userId,
+              metadata: JSON.stringify({ username: targetUser.username, reason: 'trial_extended' }),
+            },
+          })
+        }
         await db.auditLog.create({
           data: {
             action: 'admin_extend_trial',
@@ -188,7 +211,7 @@ export async function POST(req: Request) {
         })
         return NextResponse.json({
           ok: true,
-          message: `Trial extended by ${days} days`,
+          message: `Trial extended by ${days > 0 ? '+' : ''}${days} days`,
           newEndDate: newEnd.toISOString(),
         })
       }

@@ -38,6 +38,8 @@ export interface Me {
   app?: { name: string; tagline: string }
   subscription?: {
     active: boolean
+    /** Raw DB status: active | expiring_soon | suspended | expired | cancelled | pending | none */
+    status: string
     plan: string
     planName: string
     endsAt: string | null
@@ -45,6 +47,12 @@ export interface Me {
     isTrial: boolean
     isLifetime: boolean
     autoRenew: boolean
+    /** ISO string — when the subscription was suspended (null if never). */
+    suspendedAt: string | null
+    /** ISO string — when the 7-day grace period ends (null if not suspended). */
+    gracePeriodEnd: string | null
+    /** True only when status === 'suspended' AND gracePeriodEnd > now. */
+    inGracePeriod: boolean
   }
 }
 
@@ -795,6 +803,7 @@ export const api = {
     ok: boolean
     status: {
       active: boolean
+      status: string
       plan: string
       planName: string
       endsAt: string | null
@@ -802,6 +811,9 @@ export const api = {
       isTrial: boolean
       isLifetime: boolean
       autoRenew: boolean
+      suspendedAt: string | null
+      gracePeriodEnd: string | null
+      inGracePeriod: boolean
     }
     plans: Array<{
       id: string
@@ -821,12 +833,16 @@ export const api = {
     error?: string
     status?: {
       active: boolean
+      status: string
       plan: string
       planName: string
       endsAt: string | null
       daysLeft: number
       isTrial: boolean
       isLifetime: boolean
+      suspendedAt: string | null
+      gracePeriodEnd: string | null
+      inGracePeriod: boolean
     }
   }>('/api/subscription/create', {
     method: 'POST',
