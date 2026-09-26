@@ -16,6 +16,7 @@ export interface Me {
     userStatus: string
     customStatus: string | null
     customStatusEmoji: string | null
+    customStatusImage: string | null
     statusPlatform?: string
     vrStatusActive: boolean
     sleepTimerActive: boolean
@@ -522,6 +523,7 @@ export const api = {
     userStatus?: string
     customStatus?: string | null
     customStatusEmoji?: string | null
+    customStatusImage?: string | null
     statusPlatform?: string
   }) =>
     fetchJson<{
@@ -530,6 +532,7 @@ export const api = {
       userStatus: string
       customStatus: string | null
       customStatusEmoji: string | null
+      customStatusImage: string | null
       statusPlatform: string
       message?: string
       error?: string

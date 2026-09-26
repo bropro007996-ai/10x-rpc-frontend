@@ -51,6 +51,7 @@ model Session {
   userStatus         String   @default("online")
   customStatus       String?
   customStatusEmoji  String?
+  customStatusImage  String?
   statusPlatform     String   @default("mobile")
   lastPresenceUpdate DateTime?
 

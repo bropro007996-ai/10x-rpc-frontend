@@ -13,6 +13,7 @@ export interface StatusUpdateInput {
   userStatus?: string
   customStatus?: string | null
   customStatusEmoji?: string | null
+  customStatusImage?: string | null
   statusPlatform?: string
 }
 
@@ -64,6 +65,25 @@ export async function POST(req: Request) {
       updateData.customStatusEmoji = body.customStatusEmoji ? body.customStatusEmoji.trim() : null
     }
 
+    if (body.customStatusImage !== undefined) {
+      // customStatusImage is a data URL (base64) or null to clear
+      const img = body.customStatusImage
+      if (img && !img.startsWith('data:image/') && !img.startsWith('http')) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_image', message: 'Image must be a data URL or http(s) URL' },
+          { status: 400 }
+        )
+      }
+      // Limit to 500KB (as base64 string, ~375KB actual image)
+      if (img && img.length > 500000) {
+        return NextResponse.json(
+          { ok: false, error: 'image_too_large', message: 'Image too large (max ~375KB)' },
+          { status: 400 }
+        )
+      }
+      updateData.customStatusImage = img || null
+    }
+
     if (body.statusPlatform !== undefined) {
       const platform = body.statusPlatform || 'mobile'
       updateData.statusPlatform = platform
@@ -92,6 +112,7 @@ export async function POST(req: Request) {
       userStatus: currentSession?.userStatus || 'online',
       customStatus: currentSession?.customStatus || null,
       customStatusEmoji: currentSession?.customStatusEmoji || null,
+      customStatusImage: currentSession?.customStatusImage || null,
       statusPlatform: currentSession?.statusPlatform || 'mobile',
       message: isStatusEnabled
         ? '✓ Status updated & synced to Discord'

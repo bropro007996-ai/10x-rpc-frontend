@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { api, type Me } from '@/lib/api-client'
-import { EmojiPicker } from './EmojiPicker'
 import { useRouter } from './useRouter'
 import { Card, PurpleSwitch, Badge } from './ui'
 import { DISCORD_STATUSES } from '@/lib/constants'
@@ -87,12 +86,10 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
   const [platformOpen, setPlatformOpen] = useState(false)
   const [bgModalOpen, setBgModalOpen] = useState(false)
   const [bgUrl, setBgUrl] = useState(me.user?.backgroundUrl || '')
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
 
   const statusDropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const platformRef = useRef<HTMLDivElement>(null)
-  const emojiPickerRef = useRef<HTMLDivElement>(null)
 
   // Live tick for countdowns
   const [now, setNow] = useState(Date.now())
@@ -433,43 +430,23 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
 
         {/* Custom Msg Pill Input */}
         <div className="relative z-10 w-full max-w-sm mx-auto bg-[#181922]/90 border border-white/8 hover:border-white/15 focus-within:border-purple-500/40 rounded-2xl px-4 py-2.5 flex items-center gap-3 transition-colors shadow-inner">
-          <div ref={emojiPickerRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
-              className="text-xl select-none hover:scale-110 active:scale-95 transition-transform"
-              title="Click to pick an emoji"
-            >
-              {customEmoji || '😋'}
-            </button>
-            <EmojiPicker
-              value={customEmoji}
-              onChange={(emoji) => {
-                setCustomEmoji(emoji)
-                // Always save to DB — the backend decides whether to sync to Discord
-                // (only syncs if statusEnabled is true). This ensures the emoji
-                // persists even when status is OFF.
-                api.statusUpdate({
-                  customStatusEmoji: emoji,
-                  customStatus: customMsg || null,
-                  userStatus,
-                  statusPlatform: selectedPlatform,
-                }).then(() => onRefresh()).catch(() => {})
-              }}
-              onClear={() => {
-                setCustomEmoji('')
-                // Always clear in DB too
-                api.statusUpdate({
-                  customStatusEmoji: null,
-                  customStatus: customMsg || null,
-                  userStatus,
-                  statusPlatform: selectedPlatform,
-                }).then(() => onRefresh()).catch(() => {})
-              }}
-              open={emojiPickerOpen}
-              onClose={() => setEmojiPickerOpen(false)}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate({ name: 'emoji-picker' })}
+            className="text-xl select-none hover:scale-110 active:scale-95 transition-transform flex items-center gap-1"
+            title="Click to open emoji & image picker"
+          >
+            {/* Show image if customStatusImage is set, else show emoji */}
+            {me.session?.customStatusImage ? (
+              <img
+                src={me.session.customStatusImage}
+                alt="Custom"
+                className="w-6 h-6 rounded-md object-cover"
+              />
+            ) : (
+              <>{customEmoji || '😋'}</>
+            )}
+          </button>
           <input
             type="text"
             value={customMsg}
@@ -497,10 +474,14 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
             {statusEnabled ? (userStatus.toUpperCase() || 'ONLINE') : 'OFFLINE'}
           </p>
 
-          {/* Custom Status display — shows the saved emoji + text below the status line */}
-          {(customEmoji || customMsg) && (
+          {/* Custom Status display — shows the saved emoji/image + text below the status line */}
+          {(customEmoji || customMsg || me.session?.customStatusImage) && (
             <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 bg-white/5 border border-white/10 rounded-full">
-              {customEmoji && <span className="text-sm">{customEmoji}</span>}
+              {me.session?.customStatusImage ? (
+                <img src={me.session.customStatusImage} alt="Custom" className="w-4 h-4 rounded object-cover" />
+              ) : customEmoji ? (
+                <span className="text-sm">{customEmoji}</span>
+              ) : null}
               {customMsg && <span className="text-xs text-white/70 truncate max-w-[200px]">{customMsg}</span>}
             </div>
           )}

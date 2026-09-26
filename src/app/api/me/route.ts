@@ -113,6 +113,7 @@ export async function GET() {
       userStatus: session.userStatus,
       customStatus: session.customStatus,
       customStatusEmoji: session.customStatusEmoji,
+      customStatusImage: session.customStatusImage,
       statusPlatform: session.statusPlatform || 'mobile',
       vrStatusActive: session.vrStatusActive,
       sleepTimerActive,

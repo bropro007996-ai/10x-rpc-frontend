@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
       { source: '/oauth-consent', destination: '/' },
       { source: '/admin', destination: '/' },
       { source: '/login', destination: '/' },
+      { source: '/emoji-picker', destination: '/' },
     ];
   },
 };

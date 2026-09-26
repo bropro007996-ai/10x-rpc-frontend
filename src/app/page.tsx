@@ -9,6 +9,7 @@ import { OAuthConsentPage } from '@/components/tenx/OAuthConsentPage'
 import { AdminPage } from '@/components/tenx/AdminPage'
 import { ProfilePage } from '@/components/tenx/ProfilePage'
 import { CheckoutPage } from '@/components/tenx/CheckoutPage'
+import { EmojiPickerPage } from '@/components/tenx/EmojiPickerPage'
 import { api, type Me } from '@/lib/api-client'
 
 export default function Home() {
@@ -33,6 +34,7 @@ export default function Home() {
   if (route.name === 'profile') return <ProfilePage initial={me || undefined} />
   if (route.name === 'admin') return <AdminPage />
   if (route.name === 'checkout') return <CheckoutPage initial={me || undefined} />
+  if (route.name === 'emoji-picker') return <EmojiPickerPage initial={me || undefined} />
   if (route.name === 'config') {
     return (
       <GlobalConfigPage
