@@ -1,4 +1,7 @@
-// 10X RPC — /api/rpc/toggle — Enable/Disable RPC (Database as Single Source of Truth)
+// 10X RPC — /api/rpc/toggle — Enable/Disable Normal RPC
+// MUTUALLY EXCLUSIVE: When Normal RPC is enabled, Game RPC is automatically disabled.
+// This ensures both modes can never be active at the same time.
+// All other settings (statusEnabled, custom status, trial, gateway) are preserved.
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
@@ -26,12 +29,39 @@ export async function POST(req: Request) {
       const trial = await db.trial.findUnique({ where: { userId: session.userId } })
       if (!trial || !trial.active || trial.endsAt < new Date()) {
         return NextResponse.json(
-          { ok: false, error: 'trial_expired', message: 'Your 3-day trial has expired.' },
+          { ok: false, error: 'trial_expired', message: 'Your trial has expired.' },
           { status: 403 }
         )
       }
 
-      // 2. Load latest saved DB config and mark enabled with fresh timestamp
+      // 2. MUTUAL EXCLUSIVITY: Disable Game RPC if it's currently enabled
+      const currentSession = await db.session.findFirst({ where: { userId: session.userId } })
+      const gamesRpcWasEnabled = currentSession?.gamesRpcEnabled ?? false
+
+      if (gamesRpcWasEnabled) {
+        // Disable Game RPC in session
+        await db.session.updateMany({
+          where: { userId: session.userId },
+          data: { gamesRpcEnabled: false },
+        })
+        // Disable Game RPC config
+        const gameConfig = await db.gameRpcConfig.findUnique({ where: { userId: session.userId } })
+        if (gameConfig) {
+          await db.gameRpcConfig.update({
+            where: { userId: session.userId },
+            data: { enabled: false },
+          })
+        }
+        await logActivity({
+          userId: session.userId,
+          username: session.user.username,
+          type: 'games_rpc_auto_disabled',
+          category: 'rpc',
+          metadata: { reason: 'normal_rpc_enabled' },
+        })
+      }
+
+      // 3. Load latest saved DB config and mark enabled with fresh timestamp
       let rpcConfig = await db.rpcConfig.findFirst({ where: { userId: session.userId } })
       if (rpcConfig) {
         rpcConfig = await db.rpcConfig.update({
@@ -51,17 +81,22 @@ export async function POST(req: Request) {
         })
       }
 
-      // 3. Update session in DB
+      // 4. Update session: enable RPC, preserve gateway (status may still be active)
+      // Determine if gateway should stay alive (status is separate from RPC)
+      const statusSession = await db.session.findFirst({
+        where: { userId: session.userId, statusEnabled: true },
+      })
       await db.session.updateMany({
         where: { userId: session.userId },
         data: {
           rpcEnabled: true,
+          gamesRpcEnabled: false, // enforce mutual exclusivity at session level too
           gatewayReady: true,
           lastPresenceUpdate: new Date(),
         },
       })
 
-      // 4. Start RPC via the Render daemon (long-lived process owns the gateway socket)
+      // 5. Start RPC via the Render daemon (long-lived process owns the gateway socket)
       if (session.discordAccessToken) {
         await daemonSyncUser(session.userId)
       }
@@ -71,14 +106,17 @@ export async function POST(req: Request) {
         username: session.user.username,
         type: 'rpc_enabled',
         category: 'rpc',
-        metadata: { rpcConfigName: rpcConfig?.name },
+        metadata: { rpcConfigName: rpcConfig?.name, gamesRpcWasDisabled: gamesRpcWasEnabled },
       })
 
       return NextResponse.json({
         ok: true,
         enabled: true,
         rpcConfig,
-        message: 'RPC enabled & live on Discord',
+        gamesRpcAutoDisabled: gamesRpcWasEnabled,
+        message: gamesRpcWasEnabled
+          ? 'RPC enabled & live on Discord (Game RPC was auto-disabled)'
+          : 'RPC enabled & live on Discord',
       })
     } else {
       // 1. Stop RPC completely in DB (strictly preserves statusEnabled and status fields).
