@@ -386,6 +386,9 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
   }
 
   // ---- ACTIVE / EXPIRING_SOON ----
+  // IMPORTANT: This branch is only taken when endsAt > now. If the subscription
+  // is active/expiring_soon but endsAt <= now (sync failed silently), it falls
+  // through to the safety-net check below — NEVER to the trial fallback.
   if (sub && (sub.status === 'active' || sub.status === 'expiring_soon') && sub.endsAt > now) {
     const msLeft = sub.endsAt.getTime() - now.getTime()
     let planName = sub.plan
@@ -407,6 +410,38 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
       suspendedAt: null,
       gracePeriodEnd: null,
       inGracePeriod: false,
+    }
+  }
+
+  // ---- SAFETY NET: subscription exists but is in an invalid state ----
+  // This handles the edge case where syncSubscriptionState() failed to write
+  // (e.g., DB error caught by try/catch) but the subscription has actually
+  // expired (endsAt <= now) or is cancelled+expired. In this case, we MUST
+  // NOT fall through to the trial fallback (which would grant access).
+  // Instead, treat the subscription as suspended/expired based on whether
+  // a grace period end time exists and is still in the future.
+  //
+  // This is the "belt-and-suspenders" check that ensures the backend NEVER
+  // allows an expired subscription to have active access, even if the cron
+  // hasn't run or the on-demand sync failed.
+  if (sub && (sub.status === 'active' || sub.status === 'expiring_soon' || sub.status === 'cancelled') && sub.endsAt <= now) {
+    // The subscription has expired but the DB status wasn't updated yet.
+    // Calculate grace period from endsAt (same as syncSubscriptionState does).
+    const gracePeriodEnd = sub.gracePeriodEnd ?? new Date(sub.endsAt.getTime() + GRACE_PERIOD_MS)
+    const inGrace = gracePeriodEnd > now
+    return {
+      active: false,
+      status: inGrace ? 'suspended' : 'expired',
+      plan: sub.plan,
+      planName: sub.plan === 'trial' ? 'Trial' : sub.plan,
+      endsAt: sub.endsAt.toISOString(),
+      daysLeft: 0,
+      isTrial: sub.plan === 'trial',
+      isLifetime: false,
+      autoRenew: sub.autoRenew,
+      suspendedAt: sub.suspendedAt?.toISOString() ?? sub.endsAt.toISOString(),
+      gracePeriodEnd: gracePeriodEnd.toISOString(),
+      inGracePeriod: inGrace,
     }
   }
 
