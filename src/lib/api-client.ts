@@ -142,6 +142,14 @@ export interface AdminUser {
     city: string | null
     timezone: string
   } | null
+  subscription: {
+    plan: string
+    status: string
+    endsAt: string
+    daysLeft: number
+    amountPaid: number
+    currency: string
+  } | null
   isAdmin: boolean
 }
 

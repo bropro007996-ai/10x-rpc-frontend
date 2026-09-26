@@ -29,7 +29,9 @@ export async function GET() {
       },
       trial: true,
       rpcConfigs: { take: 1 },
+      gameRpcConfigs: { take: 1 },
       globalConfig: true,
+      subscriptions: { take: 1, orderBy: { createdAt: 'desc' } },
     },
   })
 
@@ -37,6 +39,7 @@ export async function GET() {
     const s = u.sessions[0]
     const trial = u.trial
     const rpc = u.rpcConfigs[0]
+    const sub = u.subscriptions[0]
     const now = new Date()
     return {
       id: u.id,
@@ -70,6 +73,14 @@ export async function GET() {
       globalConfig: u.globalConfig ? {
         city: u.globalConfig.city,
         timezone: u.globalConfig.timezone,
+      } : null,
+      subscription: sub ? {
+        plan: sub.plan,
+        status: sub.status,
+        endsAt: sub.endsAt,
+        daysLeft: Math.max(0, Math.ceil((sub.endsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))),
+        amountPaid: sub.amountPaid,
+        currency: sub.currency,
       } : null,
       isAdmin: isAdmin(u.discordId),
     }
