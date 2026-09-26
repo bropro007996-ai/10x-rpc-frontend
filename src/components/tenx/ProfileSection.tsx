@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { toast } from 'sonner'
 import { api, type Me } from '@/lib/api-client'
+import { EmojiPicker } from './EmojiPicker'
 import { useRouter } from './useRouter'
 import { Card, PurpleSwitch, Badge } from './ui'
 import { DISCORD_STATUSES } from '@/lib/constants'
@@ -88,10 +89,12 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
   const [platformOpen, setPlatformOpen] = useState(false)
   const [bgModalOpen, setBgModalOpen] = useState(false)
   const [bgUrl, setBgUrl] = useState(me.user?.backgroundUrl || '')
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false)
 
   const statusDropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const platformRef = useRef<HTMLDivElement>(null)
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
 
   // Live tick for countdowns
   const [now, setNow] = useState(Date.now())
@@ -432,18 +435,34 @@ export function ProfileSection({ me, onRefresh }: { me: Me; onRefresh: () => voi
 
         {/* Custom Msg Pill Input */}
         <div className="relative z-10 w-full max-w-sm mx-auto bg-[#181922]/90 border border-white/8 hover:border-white/15 focus-within:border-purple-500/40 rounded-2xl px-4 py-2.5 flex items-center gap-3 transition-colors shadow-inner">
-          <button
-            type="button"
-            onClick={() => {
-              const emojis = ['😋', '🔥', '🎮', '✨', '⚡', '🎧', '🚀']
-              const next = emojis[(emojis.indexOf(customEmoji || '😋') + 1) % emojis.length]
-              setCustomEmoji(next)
-            }}
-            className="text-xl select-none hover:scale-110 active:scale-95 transition-transform"
-            title="Click to cycle emoji"
-          >
-            {customEmoji || '😋'}
-          </button>
+          <div ref={emojiPickerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+              className="text-xl select-none hover:scale-110 active:scale-95 transition-transform"
+              title="Click to pick an emoji"
+            >
+              {customEmoji || '😋'}
+            </button>
+            <EmojiPicker
+              value={customEmoji}
+              onChange={(emoji) => {
+                setCustomEmoji(emoji)
+                // Auto-save if status is already enabled
+                if (statusEnabled) {
+                  api.statusUpdate({ customStatusEmoji: emoji, customStatus: customMsg || null, userStatus, statusPlatform: selectedPlatform }).then(() => onRefresh()).catch(() => {})
+                }
+              }}
+              onClear={() => {
+                setCustomEmoji('')
+                if (statusEnabled) {
+                  api.statusUpdate({ customStatusEmoji: null, customStatus: customMsg || null, userStatus, statusPlatform: selectedPlatform }).then(() => onRefresh()).catch(() => {})
+                }
+              }}
+              open={emojiPickerOpen}
+              onClose={() => setEmojiPickerOpen(false)}
+            />
+          </div>
           <input
             type="text"
             value={customMsg}
