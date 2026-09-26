@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       { source: '/dashboard', destination: '/' },
       { source: '/profile', destination: '/' },
       { source: '/config', destination: '/' },
+      { source: '/checkout', destination: '/' },
       { source: '/oauth-consent', destination: '/' },
       { source: '/admin', destination: '/' },
       { source: '/login', destination: '/' },

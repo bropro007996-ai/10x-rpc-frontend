@@ -9,6 +9,7 @@ export type Route =
   | { name: 'config' }
   | { name: 'oauth-consent' }
   | { name: 'admin' }
+  | { name: 'checkout' }
 
 export function parsePath(pathname: string): Route {
   const clean = pathname.replace(/^\//, '').trim()
@@ -19,6 +20,7 @@ export function parsePath(pathname: string): Route {
   if (parts[0] === 'config') return { name: 'config' }
   if (parts[0] === 'oauth-consent' || parts[0] === 'login') return { name: 'oauth-consent' }
   if (parts[0] === 'admin') return { name: 'admin' }
+  if (parts[0] === 'checkout') return { name: 'checkout' }
   return { name: 'home' }
 }
 
@@ -30,6 +32,7 @@ export function toPath(route: Route): string {
     case 'config': return '/config'
     case 'oauth-consent': return '/oauth-consent'
     case 'admin': return '/admin'
+    case 'checkout': return '/checkout'
   }
 }
 

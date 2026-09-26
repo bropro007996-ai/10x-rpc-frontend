@@ -1832,3 +1832,69 @@ Verification:
 - Archive (soft-delete): plan archived, not hard-deleted ✓
 - Neon Postgres schema synced with all new fields ✓
 - Local dev server works ✓
+
+---
+Task ID: 2
+Agent: subagent-payment-flow (Z.ai Code)
+Task: Create src/components/tenx/PaymentFlow.tsx — a 5-state payment flow state machine (Order Summary → Processing → Success / Failed / Cancelled) wrapping the existing Razorpay API. Frontend-only; no existing files modified.
+
+Work Log:
+- Read worklog.md, useRouter.ts, page.tsx, SubscriptionPanel.tsx, api-client.ts (AdminPlan + razorpayCreateOrder / razorpayVerify signatures), verify/route.ts, subscription.ts (activatePlan return shape), and globals.css (glass-card / purple-gradient classes) to match existing patterns.
+- Confirmed Razorpay checkout.js is already loaded via layout.tsx (async script tag) — no script injection needed.
+- Confirmed api.me() returns user.avatar + user.username for the Discord profile header.
+- Created /home/z/my-project/src/components/tenx/PaymentFlow.tsx:
+  * State machine: 'summary' | 'processing' | 'success' | 'failed' | 'cancelled'.
+  * Props: { plan: AdminPlan; onSuccess?; onCancel?; onBack }.
+  * Summary view: Discord profile (avatar + username) with fallback avatar, plan name + effective price (with crossed-out original when offerActive), durationDays, "Secure payment via Razorpay" banner, "Pay Securely" (triggers openRazorpay) + "Back to Plans" buttons.
+  * Processing view: dual-ring animated spinner (purple), "Confirming Your Payment" heading, "Your payment is being securely verified." subtext, amber warning "Please do not refresh or start another payment.", Internal Order ID display.
+  * Success view: animated green checkmark (custom pfPop + pfDraw keyframes injected via a scoped <style> tag — no existing CSS files modified), "Payment Successful" heading, "Subscription Activated" subtext, plan name / duration / activation date / expiry date rows, payment reference ID, "Open Dashboard" button, auto-redirect to /dashboard after 3s via useEffect + setTimeout.
+  * Failed view: red X icon (popping animation), "Payment Failed" heading, "Your payment could not be completed. No subscription has been activated." message, error reason block, "Retry Payment" + "Back to Plans" buttons.
+  * Cancelled view: amber AlertTriangle icon, "Payment Cancelled" heading, "Try Again" + "Back to Plans" buttons.
+  * openRazorpay(): guards against double-trigger, checks window.Razorpay availability, calls api.razorpayCreateOrder(plan.id), opens Razorpay with the exact options specified (key/amount/currency/name/description/order_id/prefill.name/theme.color=#a855f7), wires handler → api.razorpayVerify → state transition (success on ok, failed otherwise), modal.ondismiss → cancelled + onCancel(), rzp.on('payment.failed') → failed.
+  * Uses expiry date from server (verifyRes.status.endsAt) with local fallback (now + durationDays).
+  * onSuccess / onCancel stored in refs so handler callbacks remain stable across re-renders without re-opening Razorpay.
+  * Styling: #0a0b10 dark background, purple-gradient accents, glass-card / glass-card-inner classes, rounded-xl/2xl, text-xs/sm, Lucide icons throughout, ambient purple glow blur.
+- Ran `bun run lint` — clean (0 errors, 0 warnings). Removed an unused eslint-disable directive flagged on first pass.
+- Checked dev.log — server still healthy, no errors from the new file (it isn't yet routed into page.tsx; that integration is left to a follow-up task per the "DO NOT modify existing files" constraint).
+
+Stage Summary:
+- New file: src/components/tenx/PaymentFlow.tsx (~520 LOC, single self-contained component, no edits to existing files).
+- PaymentFlow is ready to be wired into the app shell (e.g. from SubscriptionPanel or a new route in useRouter.ts) by rendering <PaymentFlow plan={plan} onSuccess={...} onCancel={...} onBack={...} />.
+- Lint: clean. Dev server: healthy.
+
+---
+Task ID: 2
+Agent: zai-code (subscription-warning-and-grace-page)
+Task: Create two new subscription-system components — ExpiryWarning.tsx (dashboard banner) and GracePeriodPage.tsx (full-screen expired state) — without modifying any existing files.
+
+Work Log:
+- Read worklog.md for context (10X RPC Next.js 16 + Tailwind 4 dark theme, custom utilities: glass-card, purple-gradient, purple-glow, text-glow; useRouter hook with Route union { home, dashboard, profile, config, oauth-consent, admin }).
+- Inspected existing patterns: SubscriptionPanel.tsx (uses api.subscriptionStatus, glass-card-inner, purple-gradient), DashboardPage.tsx (renders sections with id="subscription"), api-client.ts (Me type with optional `subscription: { active, daysLeft, isTrial, isLifetime, endsAt, autoRenew }`).
+- Confirmed `tw-animate-css` is imported in globals.css → utilities available: animate-in, fade-in-0, slide-in-from-top-N, slide-in-from-bottom-N, duration-N, ease-out.
+- Created src/components/tenx/ExpiryWarning.tsx:
+  * Props: { me: Me } from @/lib/api-client.
+  * Urgency buckets derived from `me.subscription.daysLeft`: warning (4–7d, amber), urgent (2–3d, orange), critical (1d, red pulsing), expired (0d, red, copy "Your subscription has expired").
+  * Eligibility gate: requires `subscription.active && !isTrial && !isLifetime && 0 <= daysLeft <= 7` — trial-only and lifetime users never see it.
+  * Dismissible via X button; persists dismissal timestamp to localStorage key `tenx:expiry-warning-dismissed`; TTL = 24h. Reappears automatically once the 24h window elapses (re-evaluated on each render, and DashboardPage polls `me` every 4 min so a stale dismissal naturally re-shows the banner).
+  * Implementation uses lazy useState initializer reading localStorage (no useEffect setState → passes `react-hooks/set-state-in-effect` lint rule).
+  * Entrance: `animate-in fade-in-0 slide-in-from-top-8 duration-500 ease-out` (slide-down-from-top).
+  * Buttons: "Renew Now" (Crown icon, purple-gradient) and "Upgrade Plan" (Zap icon) — both call navigate({ name: 'dashboard' }) then smooth-scroll to #subscription.
+  * role="alert" + aria-live="polite" + aria-label on dismiss button for a11y.
+- Created src/components/tenx/GracePeriodPage.tsx:
+  * Props: { expiresAt: string } (ISO date when subscription expired).
+  * Grace window = expiresAt + 7 days; live countdown via setInterval(tick, 1000), re-synced whenever expiresAt changes.
+  * Full-screen bg-[#0a0b10] with ambient purple/red radial blur glow.
+  * Suspended badge (red, pulsing dot), "Your Subscription Has Expired" heading, body copy: "Your previous configuration is temporarily preserved. Renew before the countdown reaches zero to restore your workspace."
+  * Countdown card (glass-card) with 4-unit grid (Days / Hours / Minutes / Seconds) using glass-card-inner tiles, tabular-nums font-mono, 2-digit zero-pad.
+  * Permanent-deletion warning (amber AlertTriangle): "If you do not renew before the grace period ends, your preserved workspace and configuration will be permanently deleted."
+  * Buttons: "Renew Now" (Crown, purple-gradient → navigate dashboard), "View Plans" (Eye → navigate dashboard + scroll to #subscription), "Join Discord / Support" (Gift, external <a> to https://discord.gg/jr27qeCZU, purple theme to match dashboard — avoids raw Discord blurple blue per project color guidelines).
+  * Staggered entrance animations: fade-in + slide-in-from-bottom (heading → countdown card → buttons → Discord link).
+- Ran `bun run lint` → 1 error initially (setMounted synchronously in useEffect). Refactored ExpiryWarning to remove the mounted guard entirely (parent only mounts it after client-side fetch, so SSR is not a concern) and use a lazy useState initializer for dismissedAt instead. Re-ran lint → clean.
+- Checked dev.log → no errors; Next.js 16.1.3 turbopack healthy, demo mode active.
+
+Stage Summary:
+- New files only (no edits to existing files):
+  * src/components/tenx/ExpiryWarning.tsx — dismissible urgency-tiered warning banner (slide-down entrance, 24h localStorage re-show, Renew Now + Upgrade Plan buttons).
+  * src/components/tenx/GracePeriodPage.tsx — full-screen expired/grace-period page (live 7-day countdown, suspended badge, permanent-deletion warning, Renew Now + View Plans + Discord/Support buttons).
+- Both components are ready to be wired into DashboardPage.tsx (e.g. render <ExpiryWarning me={me} /> at the top of the dashboard content area, and conditionally render <GracePeriodPage expiresAt={me.subscription?.endsAt ?? new Date().toISOString()} /> when me.subscription?.active === false during grace window).
+- Lint: clean. Dev server: healthy (Ready, no errors).

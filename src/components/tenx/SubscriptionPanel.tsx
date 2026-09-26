@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { api, type AdminPlan } from '@/lib/api-client'
+import { useRouter } from './useRouter'
 import { Crown, Check, Clock, Zap, X, Gift, Tag } from 'lucide-react'
 
 interface SubStatus {
@@ -17,6 +18,7 @@ interface SubStatus {
 }
 
 export function SubscriptionPanel() {
+  const { navigate } = useRouter()
   const [status, setStatus] = useState<SubStatus | null>(null)
   const [plans, setPlans] = useState<AdminPlan[]>([])
   const [trialStatus, setTrialStatus] = useState<{ canStartTrial: boolean; message: string } | null>(null)
@@ -59,65 +61,13 @@ export function SubscriptionPanel() {
     } finally { setStartingTrial(false) }
   }
 
-  const handleActivate = async (plan: AdminPlan) => {
-    setBuying(true)
+  const handleActivate = (plan: AdminPlan) => {
+    // Store the selected plan and navigate to checkout page
+    // The checkout page handles Order Summary → Razorpay → Success/Failed/Cancelled
     try {
-      // Step 1: Create Razorpay order — amount comes from DB, not frontend
-      const orderRes = await api.razorpayCreateOrder(plan.id)
-      if (!orderRes.ok) {
-        toast.error(orderRes.error || 'Failed to create payment order')
-        return
-      }
-
-      // Step 2: Open Razorpay checkout
-      const rzp = new (window as any).Razorpay({
-        key: orderRes.keyId,
-        amount: orderRes.amount, // in paise — from DB via backend
-        currency: orderRes.currency,
-        name: '10X RPC',
-        description: orderRes.planName,
-        order_id: orderRes.orderId,
-        prefill: { name: orderRes.userEmail },
-        theme: { color: '#a855f7' },
-        handler: async (response: any) => {
-          // Step 3: Verify payment + activate plan
-          try {
-            const verifyRes = await api.razorpayVerify({
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-              planId: plan.id,
-            })
-            if (verifyRes.ok) {
-              toast.success(verifyRes.message || 'Plan activated!', { duration: 4000 })
-              await refresh()
-              setShowPlans(false)
-            } else {
-              toast.error(verifyRes.error || 'Payment verification failed')
-            }
-          } catch (e) {
-            toast.error('Payment verification failed')
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setBuying(false)
-            toast.info('Payment cancelled')
-          }
-        }
-      })
-
-      rzp.on('payment.failed', (resp: any) => {
-        toast.error(`Payment failed: ${resp.error?.description || 'unknown error'}`)
-        setBuying(false)
-      })
-
-      rzp.open()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to start payment')
-    } finally {
-      setBuying(false)
-    }
+      sessionStorage.setItem('checkout_plan', JSON.stringify(plan))
+    } catch {}
+    navigate({ name: 'checkout' })
   }
 
   const handleCancel = async () => {

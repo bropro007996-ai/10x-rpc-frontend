@@ -9,6 +9,7 @@ import { GamesRpcForm } from './GamesRpcForm'
 import { SubscriptionPanel } from './SubscriptionPanel'
 import { QuickStats } from './QuickStats'
 import { NavMenu } from './NavMenu'
+import { ExpiryWarning } from './ExpiryWarning'
 
 export function DashboardPage() {
   const { navigate } = useRouter()
@@ -153,6 +154,9 @@ export function DashboardPage() {
       <div className="space-y-4">
         {/* Quick Stats */}
         <QuickStats me={me} />
+
+        {/* Expiry warning banner (shows when subscription near expiry) */}
+        {me.subscription && <ExpiryWarning me={me} />}
 
         {/* Profile section */}
         <div id="profile">
