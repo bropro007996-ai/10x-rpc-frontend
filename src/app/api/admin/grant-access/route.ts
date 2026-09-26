@@ -55,46 +55,74 @@ export async function POST(req: Request) {
     }
 
     const now = new Date()
-    // If the user already has an active subscription that ends in the future,
-    // extend from that end date; otherwise extend from now.
     const existing = await db.subscription.findUnique({ where: { userId } })
-    const baseDate =
-      existing && existing.status === 'active' && existing.endsAt > now
-        ? existing.endsAt
-        : now
+
+    // If user is suspended, clear suspension fields and start fresh
+    // If user has active subscription, EXTEND from existing end date
+    // If user has no subscription, start from now
+    let baseDate: Date
+    let clearSuspension = false
+
+    if (existing) {
+      if (existing.status === 'suspended') {
+        // Unsuspend: start from now, clear suspension fields
+        baseDate = now
+        clearSuspension = true
+      } else if (existing.status === 'active' && existing.endsAt > now) {
+        // Extend from existing end date
+        baseDate = existing.endsAt
+      } else {
+        // Expired or cancelled — start from now
+        baseDate = now
+      }
+    } else {
+      baseDate = now
+    }
+
     const finalEndsAt = new Date(baseDate.getTime() + days * MS_PER_DAY)
+
+    const subData: any = {
+      plan: planId,
+      status: 'active',
+      amountPaid: 0,
+      currency: 'inr',
+      startsAt: now,
+      endsAt: finalEndsAt,
+      autoRenew: false,
+    }
+    if (clearSuspension) {
+      subData.suspendedAt = null
+      subData.gracePeriodEnd = null
+    }
 
     const sub = await db.subscription.upsert({
       where: { userId },
-      create: {
-        userId,
-        plan: planId,
-        status: 'active',
-        amountPaid: 0,
-        currency: 'inr',
-        startsAt: now,
-        endsAt: finalEndsAt,
-        autoRenew: false,
-      },
-      update: {
-        plan: planId,
-        status: 'active',
-        endsAt: finalEndsAt,
-        // leave amountPaid/paymentId intact if already set
-      },
+      create: { userId, ...subData },
+      update: subData,
     })
 
-    // Keep the Trial row in sync so /api/me and the daemon stay consistent
-    const trial = await db.trial.findUnique({ where: { userId } })
-    if (trial) {
-      await db.trial.update({
-        where: { userId },
-        data: { endsAt: finalEndsAt, active: true },
-      })
+    // If the user was suspended, also reactivate the trial
+    if (clearSuspension) {
+      const trial = await db.trial.findUnique({ where: { userId } })
+      if (trial && !trial.active) {
+        await db.trial.update({
+          where: { userId },
+          data: { active: true, endsAt: finalEndsAt },
+        })
+      }
     } else {
-      await db.trial.create({
-        data: { userId, endsAt: finalEndsAt, active: true },
-      })
+      // Keep the Trial row in sync so /api/me and the daemon stay consistent
+      const trial = await db.trial.findUnique({ where: { userId } })
+      if (trial) {
+        await db.trial.update({
+          where: { userId },
+          data: { endsAt: finalEndsAt, active: true },
+        })
+      } else {
+        await db.trial.create({
+          data: { userId, endsAt: finalEndsAt, active: true },
+        })
+      }
     }
 
     await db.auditLog.create({
@@ -115,14 +143,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: `Granted ${days} day(s) of ${planId} access to ${targetUser.username}`,
+      message: `Granted ${days} day(s) of ${planId} access to ${targetUser.username}${clearSuspension ? ' (unsuspended)' : existing?.status === 'active' && existing.endsAt > now ? ' (extended)' : ''}`,
       subscription: {
         id: sub.id,
         userId: sub.userId,
         plan: sub.plan,
         status: sub.status,
-        startsAt: sub.startsAt.toISOString(),
-        endsAt: sub.endsAt.toISOString(),
+        startsAt: sub.startsAt instanceof Date ? sub.startsAt.toISOString() : String(sub.startsAt),
+        endsAt: sub.endsAt instanceof Date ? sub.endsAt.toISOString() : String(sub.endsAt),
+        suspendedAt: sub.suspendedAt ? (sub.suspendedAt instanceof Date ? sub.suspendedAt.toISOString() : String(sub.suspendedAt)) : null,
+        gracePeriodEnd: sub.gracePeriodEnd ? (sub.gracePeriodEnd instanceof Date ? sub.gracePeriodEnd.toISOString() : String(sub.gracePeriodEnd)) : null,
       },
       user: {
         id: targetUser.id,
