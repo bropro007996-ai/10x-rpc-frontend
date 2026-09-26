@@ -10,6 +10,7 @@ import { SubscriptionPanel } from './SubscriptionPanel'
 import { QuickStats } from './QuickStats'
 import { NavMenu } from './NavMenu'
 import { ExpiryWarning } from './ExpiryWarning'
+import { GracePeriodPage } from './GracePeriodPage'
 
 export function DashboardPage() {
   const { navigate } = useRouter()
@@ -125,6 +126,11 @@ export function DashboardPage() {
         </div>
       </div>
     )
+  }
+
+  // Check if subscription is suspended (show grace period page)
+  if (me?.subscription && !me.subscription.active && me.subscription.endsAt && me.subscription.plan !== 'trial') {
+    return <GracePeriodPage expiresAt={me.subscription.endsAt} />
   }
 
   return (

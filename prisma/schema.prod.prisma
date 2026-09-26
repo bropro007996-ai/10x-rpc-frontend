@@ -183,12 +183,15 @@ model Subscription {
   startsAt        DateTime @default(now())
   endsAt          DateTime
   autoRenew       Boolean  @default(false)
+  suspendedAt     DateTime?
+  gracePeriodEnd  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
   @@index([endsAt])
+  @@index([suspendedAt])
 }
 
 model OAuthState {

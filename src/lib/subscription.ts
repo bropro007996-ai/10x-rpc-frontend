@@ -119,7 +119,22 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
   const sub = await db.subscription.findUnique({ where: { userId } })
   const now = new Date()
 
-  if (!sub || sub.status !== 'active' || sub.endsAt < now) {
+  // Check if subscription is suspended (grace period active)
+  if (sub && sub.status === 'suspended' && sub.gracePeriodEnd && sub.gracePeriodEnd > now) {
+    return {
+      active: false,
+      plan: sub.plan,
+      planName: sub.plan,
+      endsAt: sub.endsAt.toISOString(),
+      daysLeft: 0,
+      isTrial: false,
+      isLifetime: false,
+      autoRenew: sub.autoRenew,
+    }
+  }
+
+  // Check if subscription is expired (past grace period)
+  if (sub && (sub.status === 'expired' || (sub.status === 'suspended' && sub.gracePeriodEnd && sub.gracePeriodEnd <= now))) {
     // Fall back to trial
     const trial = await db.trial.findUnique({ where: { userId } })
     const trialActive = trial?.active && trial.endsAt > now
@@ -136,24 +151,51 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
     }
   }
 
-  const msLeft = sub.endsAt.getTime() - now.getTime()
-  // Look up the plan name from DB (fallback to stored plan string)
-  let planName = sub.plan
-  try {
-    const plan = await db.plan.findFirst({ where: { OR: [{ id: sub.plan }, { slug: sub.plan }] } })
-    if (plan) planName = plan.name
-  } catch {}
+  // Check for active or expiring_soon subscription
+  if (sub && (sub.status === 'active' || sub.status === 'expiring_soon') && sub.endsAt > now) {
+    const msLeft = sub.endsAt.getTime() - now.getTime()
+    let planName = sub.plan
+    try {
+      const plan = await db.plan.findFirst({ where: { OR: [{ id: sub.plan }, { slug: sub.plan }] } })
+      if (plan) planName = plan.name
+    } catch {}
 
-  return {
-    active: true,
-    plan: sub.plan,
-    planName,
-    endsAt: sub.endsAt.toISOString(),
-    daysLeft: Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000))),
-    isTrial: sub.plan === 'trial',
-    isLifetime: sub.plan === 'lifetime' || sub.plan === 'Lifetime',
-    autoRenew: sub.autoRenew,
+    return {
+      active: true,
+      plan: sub.plan,
+      planName,
+      endsAt: sub.endsAt.toISOString(),
+      daysLeft: Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000))),
+      isTrial: sub.plan === 'trial',
+      isLifetime: sub.plan === 'lifetime' || sub.plan === 'Lifetime',
+      autoRenew: sub.autoRenew,
+    }
   }
+
+  // Fall back to trial
+  const trial = await db.trial.findUnique({ where: { userId } })
+  const trialActive = trial?.active && trial.endsAt > now
+  const trialMsLeft = trial ? trial.endsAt.getTime() - now.getTime() : 0
+  return {
+    active: !!trialActive,
+    plan: 'trial',
+    planName: 'Trial',
+    endsAt: trial?.endsAt?.toISOString() || null,
+    daysLeft: Math.max(0, Math.ceil(trialMsLeft / (24 * 60 * 60 * 1000))),
+    isTrial: true,
+    isLifetime: false,
+    autoRenew: false,
+  }
+}
+
+/**
+ * Check if a user's subscription is suspended (grace period active).
+ * Used to block RPC access for suspended users.
+ */
+export async function isSubscriptionSuspended(userId: string): Promise<boolean> {
+  const sub = await db.subscription.findUnique({ where: { userId } })
+  if (!sub) return false
+  return sub.status === 'suspended'
 }
 
 export async function checkFeatureAccess(userId: string): Promise<{ allowed: boolean; reason?: string }> {

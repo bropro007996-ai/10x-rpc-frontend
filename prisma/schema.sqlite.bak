@@ -235,23 +235,27 @@ model Payment {
 }
 
 model Subscription {
-  id         String   @id @default(cuid())
-  userId     String   @unique
-  plan       String
-  status     String   @default("active") // active | expired | cancelled | suspended | pending
-  paymentId  String?
-  amountPaid  Int      @default(0)
-  currency   String   @default("inr")
-  startsAt   DateTime @default(now())
-  endsAt     DateTime
-  autoRenew  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  plan            String
+  status          String   @default("active") // active | expiring_soon | suspended | expired | cancelled | pending
+  paymentId       String?
+  amountPaid      Int      @default(0)
+  currency        String   @default("inr")
+  startsAt        DateTime @default(now())
+  endsAt          DateTime
+  autoRenew       Boolean  @default(false)
+  // Suspension + grace period fields
+  suspendedAt     DateTime?
+  gracePeriodEnd  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([endsAt])
+  @@index([suspendedAt])
 }
 
 model Notification {
