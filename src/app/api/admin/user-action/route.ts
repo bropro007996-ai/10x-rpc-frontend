@@ -174,9 +174,9 @@ export async function POST(req: Request) {
       }
 
       case 'ban': {
-        // Suspend the user's subscription
-        const sub = await db.subscription.findUnique({ where: { userId } })
+        // Suspend the user's subscription + trial
         const now = new Date()
+        const sub = await db.subscription.findUnique({ where: { userId } })
         if (sub) {
           const gracePeriodEnd = sub.endsAt > now
             ? new Date(sub.endsAt.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -188,6 +188,29 @@ export async function POST(req: Request) {
               suspendedAt: now,
               gracePeriodEnd,
             },
+          })
+        } else {
+          // No subscription record — create one in suspended state
+          await db.subscription.create({
+            data: {
+              userId,
+              plan: 'suspended',
+              status: 'suspended',
+              startsAt: now,
+              endsAt: now,
+              suspendedAt: now,
+              gracePeriodEnd: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+              amountPaid: 0,
+              currency: 'inr',
+            },
+          })
+        }
+        // Also deactivate the trial so the user can't use trial access while suspended
+        const trial = await db.trial.findUnique({ where: { userId } })
+        if (trial && trial.active) {
+          await db.trial.update({
+            where: { userId },
+            data: { active: false },
           })
         }
         // Stop RPC
@@ -216,12 +239,10 @@ export async function POST(req: Request) {
       }
 
       case 'unban': {
-        // Unsuspend — reactivate subscription
+        // Unsuspend — reactivate subscription + trial
+        const now = new Date()
         const sub = await db.subscription.findUnique({ where: { userId } })
         if (sub) {
-          const now = new Date()
-          // If grace period hasn't ended, restore from original expiry
-          // If grace period ended, give them 30 days from now
           const newEnd = sub.gracePeriodEnd && sub.gracePeriodEnd > now
             ? sub.endsAt > now ? sub.endsAt : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
             : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
@@ -233,6 +254,14 @@ export async function POST(req: Request) {
               gracePeriodEnd: null,
               endsAt: newEnd,
             },
+          })
+        }
+        // Reactivate trial as well
+        const trial = await db.trial.findUnique({ where: { userId } })
+        if (trial) {
+          await db.trial.update({
+            where: { userId },
+            data: { active: true, endsAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) },
           })
         }
         await db.auditLog.create({
