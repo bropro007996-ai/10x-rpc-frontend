@@ -180,7 +180,7 @@ model SiteSettings {
   siteName        String   @default("10X RPC")
   heroTitle       String   @default("Take control of your Discord presence")
   heroSubtitle    String   @default("10X RPC puts you in charge of your status, activity, and presence — 24/7.")
-  discordInvite   String   @default("https://discord.gg/jr27qeCZU")
+  discordInvite   String   @default("https://discord.gg/JjsPqbWnrH")
   supportText     String?
   maintenanceMode Boolean  @default(false)
   createdAt       DateTime @default(now())

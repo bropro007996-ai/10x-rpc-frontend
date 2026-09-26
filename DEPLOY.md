@@ -121,7 +121,7 @@ This swaps the SQLite sandbox schema for the Neon Postgres schema (with the corr
 | `DISCORD_CLIENT_SECRET` | fresh secret from Discord |
 | `DISCORD_BOT_TOKEN` | fresh bot token |
 | `DISCORD_SERVER_ID` | `1549302358926823496` |
-| `DISCORD_INVITE_URL` | `https://discord.gg/jr27qeCZU` |
+| `DISCORD_INVITE_URL` | `https://discord.gg/JjsPqbWnrH` |
 | `DISCORD_OAUTH_SCOPE` | `openid identify sdk.social_layer_presence` |
 | `NEXT_PUBLIC_APP_URL` | `https://<your-project>.vercel.app` (after first deploy) |
 | `DISCORD_REDIRECT_URI` | `https://<your-project>.vercel.app/auth/callback` |
@@ -174,7 +174,7 @@ Alternatively, deploy manually:
 | `DISCORD_CLIENT_SECRET` | same fresh secret |
 | `DISCORD_BOT_TOKEN` | same fresh bot token |
 | `DISCORD_SERVER_ID` | `1549302358926823496` |
-| `DISCORD_INVITE_URL` | `https://discord.gg/jr27qeCZU` |
+| `DISCORD_INVITE_URL` | `https://discord.gg/JjsPqbWnrH` |
 | `DISCORD_OAUTH_SCOPE` | `openid identify sdk.social_layer_presence` |
 | `NEXT_PUBLIC_APP_URL` | `https://<your-project>.vercel.app` (Vercel URL) |
 | `DISCORD_REDIRECT_URI` | `https://<your-project>.vercel.app/auth/callback` (Vercel URL) |

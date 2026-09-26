@@ -18,7 +18,7 @@ export const CONFIG = {
     // The Gaming SDK gateway (gateway.gaming-sdk.com) does NOT support custom images.
     gatewayUrl: process.env.DISCORD_GATEWAY_URL || 'wss://gateway.discord.gg/?v=10&encoding=json',
     serverId: process.env.DISCORD_SERVER_ID || '1549302358926823496',
-    inviteUrl: process.env.DISCORD_INVITE_URL || 'https://discord.gg/jr27qeCZU',
+    inviteUrl: process.env.DISCORD_INVITE_URL || 'https://discord.gg/JjsPqbWnrH',
   },
   app: {
     name: '10X RPC',

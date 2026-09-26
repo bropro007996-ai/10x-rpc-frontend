@@ -191,7 +191,7 @@ export function NavMenu({ isAdmin, onLogout }: NavMenuProps) {
 
             {/* Discord Server link */}
             <a
-              href="https://discord.gg/jr27qeCZU"
+              href="https://discord.gg/JjsPqbWnrH"
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}

@@ -41,7 +41,7 @@ Create two new subscription-system components without modifying any existing fil
   - `glass-card` countdown card: 4-unit grid (Days/Hours/Minutes/Seconds) using `glass-card-inner` tiles, `font-mono tabular-nums`, 2-digit zero-pad.
   - Amber warning panel: "If you do not renew before the grace period ends, your preserved workspace and configuration will be permanently deleted."
   - Buttons (grid 1col on mobile, 2col on sm+): "Renew Now" (Crown, purple-gradient → dashboard), "View Plans" (Eye, glass → dashboard + scroll #subscription).
-  - Discord/Support: external `<a>` to `https://discord.gg/jr27qeCZU` (Gift icon + ExternalLink), purple-themed.
+  - Discord/Support: external `<a>` to `https://discord.gg/JjsPqbWnrH` (Gift icon + ExternalLink), purple-themed.
   - Staggered entrance animations: badge (fade), heading (slide-from-bottom-2), card + buttons + Discord (slide-from-bottom-4).
 
 ## Lint & runtime

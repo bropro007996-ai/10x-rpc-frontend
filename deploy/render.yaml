@@ -48,6 +48,6 @@ services:
       - key: DISCORD_SERVER_ID
         value: "1549302358926823496"
       - key: DISCORD_INVITE_URL
-        value: "https://discord.gg/jr27qeCZU"
+        value: "https://discord.gg/JjsPqbWnrH"
       - key: DISCORD_OAUTH_SCOPE
         value: "openid identify sdk.social_layer_presence"

@@ -146,7 +146,7 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
 
         {/* Discord / Support link — purple theme to match the dashboard */}
         <a
-          href="https://discord.gg/jr27qeCZU"
+          href="https://discord.gg/JjsPqbWnrH"
           target="_blank"
           rel="noopener noreferrer"
           className="w-full flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/30 text-purple-300 font-medium rounded-xl px-4 py-3 hover:bg-purple-500/20 active:scale-[0.98] transition-all animate-in fade-in-0 slide-in-from-bottom-4 duration-700"

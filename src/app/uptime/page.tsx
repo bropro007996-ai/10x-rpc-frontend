@@ -203,7 +203,7 @@ export default function UptimePage() {
           <div className="max-w-3xl mx-auto text-center space-y-3">
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-white/60">
               <a href="/" className="hover:text-white">Home</a>
-              <a href="https://discord.gg/jr27qeCZU" target="_blank" rel="noopener noreferrer" className="hover:text-white">Join Discord</a>
+              <a href="https://discord.gg/JjsPqbWnrH" target="_blank" rel="noopener noreferrer" className="hover:text-white">Join Discord</a>
             </div>
             <p className="text-xs text-white/40">Copyright © 2026 10X RPC. All rights reserved.</p>
             <p className="text-xs text-white/30 max-w-md mx-auto">
