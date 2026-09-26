@@ -166,12 +166,20 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
 
   // ------------------------------------------------------------------
   // CASE A: No Subscription row yet.
-  // If the user has an EXPIRED trial, fold it into the suspension
-  // lifecycle by creating a suspended Subscription (plan = 'trial').
+  // If the user has an EXPIRED trial (regardless of trial.active flag),
+  // fold it into the suspension lifecycle by creating a suspended
+  // Subscription (plan = 'trial').
+  //
+  // IMPORTANT: We do NOT require trial.active === true here. The trial's
+  // `active` flag can be false if it was deactivated by a previous admin
+  // action or race condition — but if endsAt has passed and no Subscription
+  // row exists, the user is in limbo (trial expired, no suspension, RPC
+  // still running). We must fold them into the suspension lifecycle
+  // regardless of the trial.active flag.
   // ------------------------------------------------------------------
   if (!sub) {
     const trial = await db.trial.findUnique({ where: { userId } })
-    if (trial && trial.active && trial.endsAt <= now) {
+    if (trial && trial.endsAt <= now) {
       const gracePeriodEnd = new Date(trial.endsAt.getTime() + GRACE_PERIOD_MS)
       try {
         await db.subscription.create({
@@ -193,11 +201,14 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
         return
       }
 
-      // Mark trial as inactive so it can never be re-used.
-      await db.trial.update({
-        where: { userId },
-        data: { active: false },
-      })
+      // Mark trial as inactive so it can never be re-used (idempotent —
+      // safe to run even if trial.active was already false).
+      if (trial.active) {
+        await db.trial.update({
+          where: { userId },
+          data: { active: false },
+        })
+      }
 
       // Audit trail (3 events — expiry, suspension, grace start).
       await logAudit('subscription_expired', userId, { plan: 'trial', endsAt: trial.endsAt.toISOString() })
@@ -451,13 +462,40 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
     }
   }
 
-  // ---- NO SUBSCRIPTION ROW: fall back to active trial (if still valid) ----
-  // NOTE: An expired trial would have been folded into a suspended Subscription
-  // by syncSubscriptionState() above. If we reach here with an expired trial,
-  // the sync failed silently — treat as no active access.
+  // ---- NO SUBSCRIPTION ROW: fall back to trial ----
+  // If the trial is still active (endsAt > now), grant access.
+  // If the trial has EXPIRED (endsAt <= now) but syncSubscriptionState
+  // failed to create a suspended Subscription row (e.g., DB error caught
+  // by try/catch), we must NOT return status='none' — that would let the
+  // dashboard show the normal view and RPC would stay running.
+  // Instead, return status='suspended' with a calculated grace period so
+  // the dashboard redirects to the GracePeriodPage immediately.
   const trial = await db.trial.findUnique({ where: { userId } })
+  const trialExpired = !!trial && trial.endsAt <= now
   const trialActive = !!trial && trial.active && trial.endsAt > now
   const trialMsLeft = trial ? trial.endsAt.getTime() - now.getTime() : 0
+
+  if (trialExpired) {
+    // Trial expired but sync didn't create a Subscription row.
+    // Calculate grace period from trial.endsAt (same as syncSubscriptionState does).
+    const gracePeriodEnd = new Date(trial!.endsAt.getTime() + GRACE_PERIOD_MS)
+    const inGrace = gracePeriodEnd > now
+    return {
+      active: false,
+      status: inGrace ? 'suspended' : 'expired',
+      plan: 'trial',
+      planName: 'Trial',
+      endsAt: trial!.endsAt.toISOString(),
+      daysLeft: 0,
+      isTrial: true,
+      isLifetime: false,
+      autoRenew: false,
+      suspendedAt: trial!.endsAt.toISOString(),
+      gracePeriodEnd: gracePeriodEnd.toISOString(),
+      inGracePeriod: inGrace,
+    }
+  }
+
   return {
     active: trialActive,
     status: trialActive ? 'active' : 'none',

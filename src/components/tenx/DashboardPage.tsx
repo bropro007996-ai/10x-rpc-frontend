@@ -130,13 +130,20 @@ export function DashboardPage() {
     )
   }
 
-  // Check if subscription is suspended (show grace period page).
+  // Check if subscription is suspended or expired (show grace period page).
   // This applies to ALL plan types — trial, monthly, 2-month, custom — because
   // the backend folds expired trials into the same suspension lifecycle.
+  //
   // The backend (syncSubscriptionState) has already transitioned the status
-  // to 'suspended' on-demand at the exact expiry timestamp.
-  if (me?.subscription && me.subscription.status === 'suspended' && me.subscription.inGracePeriod) {
-    return <GracePeriodPage expiresAt={me.subscription.endsAt!} />
+  // to 'suspended' on-demand at the exact expiry timestamp. We redirect when:
+  //   - status === 'suspended' && inGracePeriod → user is in the 7-day grace
+  //   - status === 'expired' → grace period has ended, workspace cleaned up
+  //   - status === 'none' && !active → no active subscription at all
+  //
+  // WITHOUT this check, an expired trial user would see the normal dashboard
+  // with RPC still running (the exact bug from the user's screenshot).
+  if (me?.subscription && !me.subscription.active && me.subscription.endsAt) {
+    return <GracePeriodPage expiresAt={me.subscription.endsAt} />
   }
 
   return (
