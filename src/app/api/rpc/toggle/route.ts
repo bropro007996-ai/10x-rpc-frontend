@@ -132,9 +132,7 @@ export async function POST(req: Request) {
           : 'RPC enabled & live on Discord',
       })
     } else {
-      // 1. Stop RPC completely in DB (strictly preserves statusEnabled and status fields).
-      //    The gateway is kept alive only if the user's Status feature is still active
-      //    on ANY of their sessions — never because of RPC.
+      // 1. Stop RPC for ONLY THIS USER (does not affect any other user)
       const statusSession = await db.session.findFirst({
         where: {
           userId: session.userId,
@@ -143,10 +141,12 @@ export async function POST(req: Request) {
       })
       const keepGateway = !!statusSession
 
-      await db.session.updateMany({
+      // ONLY update THIS user's sessions — where: { userId: session.userId }
+      const stopResult = await db.session.updateMany({
         where: { userId: session.userId },
         data: {
           rpcEnabled: false,
+          gamesRpcEnabled: false,
           gatewayReady: keepGateway,
           lastPresenceUpdate: new Date(),
         },

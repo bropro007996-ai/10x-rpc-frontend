@@ -82,28 +82,48 @@ export async function POST(req: Request) {
       }
 
       case 'stop-rpc': {
-        await db.session.updateMany({
-          where: { userId },
+        // STOP RPC FOR ONLY THE SELECTED USER — does NOT affect any other user
+        const stopResult = await db.session.updateMany({
+          where: { userId }, // ONLY this user's sessions
           data: { rpcEnabled: false, gamesRpcEnabled: false },
         })
         await db.rpcConfig.updateMany({
-          where: { userId },
+          where: { userId }, // ONLY this user's RPC config
           data: { enabled: false },
         })
         await db.gameRpcConfig.updateMany({
-          where: { userId },
+          where: { userId }, // ONLY this user's game RPC config
           data: { enabled: false },
         })
-        const result = await daemonStopUserRpc(userId)
+        const result = await daemonStopUserRpc(userId) // ONLY this user's daemon
+
+        // Verify no other users were affected
+        const otherActiveCount = await db.session.count({
+          where: {
+            userId: { not: userId }, // All OTHER users
+            rpcEnabled: true,
+            expiresAt: { gt: new Date() },
+          },
+        })
+
         await db.auditLog.create({
           data: {
             action: 'admin_stop_rpc',
             actor: session.userId,
             target: userId,
-            metadata: JSON.stringify({ username: targetUser.username }),
+            metadata: JSON.stringify({
+              username: targetUser.username,
+              sessionsUpdated: stopResult.count,
+              otherUsersStillActive: otherActiveCount,
+            }),
           },
         })
-        return NextResponse.json({ ok: true, message: 'RPC stopped & cleared' })
+        return NextResponse.json({
+          ok: true,
+          message: `RPC stopped for ${targetUser.username} (${stopResult.count} session(s) updated). ${otherActiveCount} other user(s) still running.`,
+          stoppedUser: { id: userId, username: targetUser.username },
+          otherUsersUnaffected: otherActiveCount,
+        })
       }
 
       case 'toggle-status': {
