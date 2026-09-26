@@ -1,7 +1,9 @@
 // 10X RPC — EmojiPicker — categorized emoji picker with search + recents
 // Replaces the simple cycling button with a full popup emoji selector.
+// Features smart positioning: opens upward if space available, otherwise
+// flips downward to avoid viewport clipping.
 'use client'
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { Search, X, Clock } from 'lucide-react'
 
 // === Emoji categories ===
@@ -147,8 +149,33 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
     if (typeof window === 'undefined') return []
     return loadRecents()
   })
+  // placement: 'up' = opens above the button, 'down' = opens below.
+  // Computed once when the picker opens, using a callback ref that measures
+  // the trigger button's position before the popup is painted.
+  const [placement, setPlacement] = useState<'up' | 'down'>('up')
   const pickerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Callback ref: runs AFTER the popup div is mounted but BEFORE the browser
+  // paints. This lets us measure available space and set placement without
+  // a visible flicker.
+  const measureAndSetPlacement = useCallback((node: HTMLDivElement | null) => {
+    pickerRef.current = node
+    if (!node || !open) return
+    // Find the trigger button (the emoji button that opened this picker)
+    let parent = node.parentElement
+    let trigger: HTMLElement | null = null
+    while (parent && !trigger) {
+      trigger = parent.querySelector('button')
+      if (trigger) break
+      parent = parent.parentElement
+    }
+    if (!trigger) return
+    const triggerRect = trigger.getBoundingClientRect()
+    const spaceAbove = triggerRect.top
+    const pickerHeight = 360 // approximate max height of the picker
+    setPlacement(spaceAbove < pickerHeight ? 'down' : 'up')
+  }, [open])
 
   // Focus search when opened
   useEffect(() => {
@@ -223,8 +250,8 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
       />
 
       <div
-        ref={pickerRef}
-        className="absolute z-50 bottom-full mb-2 left-0 sm:left-auto sm:right-0 w-[320px] max-w-[calc(100vw-2rem)] bg-[#181922]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+        ref={measureAndSetPlacement}
+        className={`absolute z-50 ${placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 sm:left-auto sm:right-0 w-[320px] max-w-[calc(100vw-2rem)] bg-[#181922]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150`}
       >
         {/* Header with search */}
         <div className="p-3 border-b border-white/10">
@@ -273,7 +300,7 @@ export function EmojiPicker({ value, onChange, onClear, open, onClose }: EmojiPi
         </div>
 
         {/* Emoji grid */}
-        <div className="p-3 max-h-[240px] overflow-y-auto custom-scrollbar">
+        <div className="p-3 max-h-[200px] overflow-y-auto custom-scrollbar">
           {activeCat && activeCat.emojis.length > 0 ? (
             <>
               <div className="flex items-center gap-1.5 mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
