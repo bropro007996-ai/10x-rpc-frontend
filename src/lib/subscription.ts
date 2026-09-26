@@ -119,8 +119,9 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
   const sub = await db.subscription.findUnique({ where: { userId } })
   const now = new Date()
 
-  // Check if subscription is suspended (grace period active)
-  if (sub && sub.status === 'suspended' && sub.gracePeriodEnd && sub.gracePeriodEnd > now) {
+  // Check if subscription is suspended (grace period active or expired)
+  // This takes priority over trial fallback — a suspended user should NOT get trial access
+  if (sub && sub.status === 'suspended') {
     return {
       active: false,
       plan: sub.plan,
@@ -134,7 +135,7 @@ export async function getSubscriptionStatus(userId: string): Promise<Subscriptio
   }
 
   // Check if subscription is expired (past grace period)
-  if (sub && (sub.status === 'expired' || (sub.status === 'suspended' && sub.gracePeriodEnd && sub.gracePeriodEnd <= now))) {
+  if (sub && sub.status === 'expired') {
     // Fall back to trial
     const trial = await db.trial.findUnique({ where: { userId } })
     const trialActive = trial?.active && trial.endsAt > now

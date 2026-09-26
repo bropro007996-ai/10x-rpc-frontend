@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { daemonSyncUser, daemonStopUserRpc } from '@/lib/daemon-bridge'
 import { logActivity } from '@/lib/activity/logger'
 import { isSubscriptionSuspended } from '@/lib/subscription'
+import { getSubscriptionStatus } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -27,8 +28,8 @@ export async function POST(req: Request) {
 
     // BLOCK RPC for suspended users
     if (enabled) {
-      const suspended = await isSubscriptionSuspended(session.userId)
-      if (suspended) {
+      const subStatus = await getSubscriptionStatus(session.userId)
+      if (!subStatus.active && !subStatus.isTrial) {
         return NextResponse.json(
           { ok: false, error: 'subscription_suspended', message: 'Your subscription is suspended. Please renew to restore RPC access.' },
           { status: 403 }

@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { daemonSyncUser, daemonStopUserRpc } from '@/lib/daemon-bridge'
 import { findSpoofGame } from '@/lib/spoof-games'
 import { logActivity } from '@/lib/activity/logger'
+import { getSubscriptionStatus } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -21,6 +22,17 @@ export async function POST(req: Request) {
 
     const body = await req.json() as { enabled?: boolean }
     const enabled = !!body.enabled
+
+    // BLOCK Games RPC for suspended users
+    if (enabled) {
+      const subStatus = await getSubscriptionStatus(session.userId)
+      if (!subStatus.active && !subStatus.isTrial) {
+        return NextResponse.json(
+          { ok: false, error: 'subscription_suspended', message: 'Your subscription is suspended. Please renew to restore RPC access.' },
+          { status: 403 }
+        )
+      }
+    }
 
     if (enabled) {
       // 1. Check trial
