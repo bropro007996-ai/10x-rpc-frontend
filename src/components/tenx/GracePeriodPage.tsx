@@ -1,7 +1,7 @@
 // 10X RPC — Grace period full-screen page (shown when subscription is expired but workspace is still preserved)
 'use client'
 import { useEffect, useState } from 'react'
-import { Clock, AlertTriangle, Gift, Crown, Eye, ExternalLink } from 'lucide-react'
+import { Clock, AlertTriangle, Gift, Crown, Eye, ExternalLink, Power } from 'lucide-react'
 import { useRouter } from './useRouter'
 
 interface GracePeriodPageProps {
@@ -91,8 +91,37 @@ export function GracePeriodPage({ expiresAt }: GracePeriodPageProps) {
             Your Subscription Has Expired
           </h1>
           <p className="text-sm sm:text-base text-white/60 mt-3 max-w-md mx-auto leading-relaxed">
-            Your previous configuration is temporarily preserved. Renew before the countdown reaches zero to restore your workspace.
+            Your RPC, status, and game-status services have been automatically disabled because your subscription has expired.
           </p>
+        </div>
+
+        {/* RPC services disabled banner */}
+        <div className="glass-card p-4 mb-5 animate-in fade-in-0 slide-in-from-bottom-3 duration-500 border-red-500/20">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/15 border border-red-500/25 flex items-center justify-center">
+              <Power className="w-4 h-4 text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white mb-1">All RPC Services Disabled</p>
+              <div className="space-y-1.5 mt-2">
+                <div className="flex items-center gap-2 text-xs text-white/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  RPC (Rich Presence) — Stopped
+                </div>
+                <div className="flex items-center gap-2 text-xs text-white/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  RPC Status — Disabled
+                </div>
+                <div className="flex items-center gap-2 text-xs text-white/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  Game Status — Disabled
+                </div>
+              </div>
+              <p className="text-[11px] text-white/40 mt-2.5 leading-relaxed">
+                Your saved configuration is temporarily preserved. Renew before the countdown reaches zero to restore your workspace.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Countdown card */}

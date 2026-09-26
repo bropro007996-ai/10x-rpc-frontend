@@ -3,15 +3,24 @@
 // LIFECYCLE (single generic system for ALL plan types — trial, monthly, 2-month, custom):
 //
 //   ACTIVE / EXPIRING_SOON  ──(endsAt <= now)──►  SUSPENDED  (7-day grace starts)
+//                                                  └─► ALL RPC SERVICES STOPPED
+//                                                      (RPC, Game Status, RPC Status,
+//                                                       Custom Presence, daemon sockets)
 //   SUSPENDED               ──(gracePeriodEnd <= now)──►  EXPIRED  (workspace cleanup)
-//   SUSPENDED + renew       ──►  ACTIVE  (suspension fields cleared, workspace restored)
+//   SUSPENDED + renew       ──►  ACTIVE  (suspension cleared, workspace restored,
+//                                          but RPC stays OFF — user must manually start it)
 //
 // The backend is the single source of truth. `syncSubscriptionState()` performs
 // on-demand expiry detection on every protected request, so suspension happens
 // at the EXACT expiry timestamp — no waiting for the cron. The cron is only a
 // backup safety net.
+//
+// ACCOUNT ISOLATION: every stop/disable operation is scoped by `userId`.
+// Other users' RPC services are NEVER touched.
 import { db } from './db'
+import { daemonStopUserRpc } from './daemon-bridge'
 import Razorpay from 'razorpay'
+
 
 // Razorpay client (initialized lazily — only when payment routes are called)
 let razorpayInstance: Razorpay | null = null
@@ -195,6 +204,12 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
       await logAudit('subscription_suspended', userId, { plan: 'trial', suspendedAt: now.toISOString(), gracePeriodEnd: gracePeriodEnd.toISOString(), originalExpiry: trial.endsAt.toISOString() })
       await logAudit('grace_period_started', userId, { plan: 'trial', gracePeriodEnd: gracePeriodEnd.toISOString() })
 
+      // ═══════════════════════════════════════════════════════════════════
+      // AUTOMATIC RPC SHUTDOWN — stop ALL running RPC services for this user.
+      // This is account-isolated: only affects THIS userId.
+      // ═══════════════════════════════════════════════════════════════════
+      await stopUserRpcServices(userId, 'subscription_suspended')
+
       await notify(userId, 'error', 'Subscription Suspended',
         `Your trial has expired and your subscription is now suspended. You have ${GRACE_PERIOD_DAYS} days to renew before your workspace is permanently deleted.`)
     }
@@ -220,8 +235,18 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
     await logAudit('subscription_suspended', userId, { subscriptionId: sub.id, plan: sub.plan, suspendedAt: now.toISOString(), gracePeriodEnd: gracePeriodEnd.toISOString(), originalExpiry: sub.endsAt.toISOString() })
     await logAudit('grace_period_started', userId, { subscriptionId: sub.id, plan: sub.plan, gracePeriodEnd: gracePeriodEnd.toISOString() })
 
+    // ═══════════════════════════════════════════════════════════════════
+    // AUTOMATIC RPC SHUTDOWN — stop ALL running RPC services for this user.
+    // This is account-isolated: only affects THIS userId.
+    //   - Tells the Render daemon to clear Discord presence for this user
+    //   - Disables rpcEnabled, gamesRpcEnabled, statusEnabled, gatewayReady
+    //   - Disables RpcConfig.enabled and GameRpcConfig.enabled
+    //   - The saved config DATA is preserved (workspace retention policy)
+    // ═══════════════════════════════════════════════════════════════════
+    await stopUserRpcServices(userId, 'subscription_suspended')
+
     await notify(userId, 'error', 'Subscription Suspended',
-      `Your subscription has expired and is now suspended. You have ${GRACE_PERIOD_DAYS} days to renew before your workspace is permanently deleted.`)
+      `Your subscription has expired and is now suspended. All RPC services have been automatically disabled. You have ${GRACE_PERIOD_DAYS} days to renew before your workspace is permanently deleted.`)
     return
   }
 
@@ -236,18 +261,9 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
       data: { status: 'expired' },
     })
 
-    // Workspace cleanup — disable (do not delete) so audit/payment data is intact.
-    await db.rpcConfig.updateMany({ where: { userId }, data: { enabled: false } })
-    await db.gameRpcConfig.updateMany({ where: { userId }, data: { enabled: false } })
-    await db.session.updateMany({
-      where: { userId, expiresAt: { gt: now } },
-      data: {
-        rpcEnabled: false,
-        gamesRpcEnabled: false,
-        gatewayReady: false,
-        statusEnabled: false,
-      },
-    })
+    // Final RPC shutdown (safety net — RPC was already stopped at suspension,
+    // but this ensures nothing was re-enabled during the grace period).
+    await stopUserRpcServices(userId, 'grace_period_ended')
 
     await logAudit('grace_period_ended', userId, { subscriptionId: sub.id, gracePeriodEnd: sub.gracePeriodEnd.toISOString(), cleanupAt: now.toISOString() })
     await logAudit('workspace_deleted', userId, { subscriptionId: sub.id, gracePeriodEnd: sub.gracePeriodEnd.toISOString(), cleanupAt: now.toISOString() })
@@ -521,17 +537,40 @@ export async function activatePlan(
   }
 
   // ---- Workspace restoration (renewal during grace period) ----
-  // During the grace period, the RPC config & session were PRESERVED (not
-  // cleaned up). The user's `enabled` flags may still be set correctly.
-  // We just need to re-arm `gatewayReady` so the daemon can resume pushing
-  // presence if the user had RPC/Status enabled before suspension.
+  // IMPORTANT: Renewal restores ACCESS and the saved RPC CONFIGURATION DATA,
+  // but does NOT automatically start RPC. All RPC services remain OFF.
+  // The user must manually click "Start RPC" / enable Status / enable Games RPC.
+  //
+  // This is the required behavior per the subscription lifecycle spec:
+  //   SUSPENDED + renew → ACTIVE + RPC OFF + Game Status OFF + RPC Status OFF
   if (inGrace) {
-    // Re-arm gatewayReady if the user has a Discord token, so the daemon
-    // can resume pushing presence if the user had RPC/Status enabled before suspension.
-    await db.session.updateMany({
-      where: { userId, discordAccessToken: { not: null } },
-      data: { gatewayReady: true, lastPresenceUpdate: new Date() },
+    // Ensure ALL RPC services stay OFF after renewal.
+    // The saved RPC config DATA (name, state, details, buttons, images) is
+    // PRESERVED — only the `enabled` flags are forced to false so nothing
+    // auto-starts. The user manually toggles them on from the dashboard.
+    await db.rpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
     }).catch(() => {})
+    await db.gameRpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
+    }).catch(() => {})
+    await db.session.updateMany({
+      where: { userId },
+      data: {
+        rpcEnabled: false,
+        gamesRpcEnabled: false,
+        statusEnabled: false,
+        gatewayReady: false,
+        lastPresenceUpdate: new Date(),
+      },
+    }).catch(() => {})
+
+    // Also tell the daemon to clear any lingering presence (safety net —
+    // presence was already cleared at suspension, but this ensures nothing
+    // reconnected during the grace period).
+    await daemonStopUserRpc(userId).catch(() => {})
 
     await logAudit('subscription_reactivated', userId, {
       subscriptionId: sub.id,
@@ -540,19 +579,40 @@ export async function activatePlan(
       amountPaid: amountPaid || plan.priceInr,
       endsAt: finalEndsAt.toISOString(),
       renewedDuringGrace: true,
+      rpcAutoStarted: false, // explicit: RPC stays OFF after renewal
     })
     await logAudit('workspace_restored', userId, {
       subscriptionId: sub.id,
       restoredAt: now.toISOString(),
+      rpcState: 'off', // explicit: RPC remains OFF — user must manually start
     })
     await logAudit('grace_period_cancelled', userId, {
       subscriptionId: sub.id,
       cancelledAt: now.toISOString(),
     })
     await notify(userId, 'success', 'Subscription Reactivated',
-      `Your subscription has been reactivated. Your workspace and RPC configuration have been restored.`)
+      `Your subscription has been reactivated. Your workspace and RPC configuration have been restored. Please manually start RPC from the dashboard to resume broadcasting.`)
   } else if (wasSuspended || wasExpired) {
     // Renewed AFTER cleanup — fresh start (workspace was disabled, not deleted).
+    // Same rule: RPC stays OFF — user must manually enable it.
+    await db.rpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
+    }).catch(() => {})
+    await db.gameRpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
+    }).catch(() => {})
+    await db.session.updateMany({
+      where: { userId },
+      data: {
+        rpcEnabled: false,
+        gamesRpcEnabled: false,
+        statusEnabled: false,
+        gatewayReady: false,
+      },
+    }).catch(() => {})
+
     await logAudit('subscription_reactivated', userId, {
       subscriptionId: sub.id,
       planId: plan.id,
@@ -560,9 +620,10 @@ export async function activatePlan(
       amountPaid: amountPaid || plan.priceInr,
       endsAt: finalEndsAt.toISOString(),
       renewedAfterCleanup: true,
+      rpcAutoStarted: false,
     })
     await notify(userId, 'success', 'Subscription Activated',
-      `Your ${plan.name} subscription is now active.`)
+      `Your ${plan.name} subscription is now active. Please manually start RPC from the dashboard.`)
   } else {
     await logAudit('subscription_activated', userId, {
       subscriptionId: sub.id,
@@ -587,6 +648,91 @@ export async function cancelSubscription(userId: string): Promise<{ ok: boolean;
   })
   await logAudit('subscription_cancelled', userId, { subscriptionId: sub.id })
   return { ok: true, message: 'Subscription cancelled. Access continues until the current period ends.' }
+}
+
+// ---------------------------------------------------------------------------
+// AUTOMATIC RPC SHUTDOWN — stop ALL RPC services for a user
+// ---------------------------------------------------------------------------
+// Called when a subscription transitions to SUSPENDED or EXPIRED.
+// This is ACCOUNT-ISOLATED — only affects the specified userId.
+//
+// Operations performed (all scoped by `where: { userId }`):
+//   1. Tells the Render daemon to clear Discord Rich Presence for this user
+//      (daemonStopUserRpc sends an HTTP POST to /stop-rpc?userId=... — the
+//      daemon closes the user's gateway socket and clears their presence).
+//   2. Disables session flags: rpcEnabled, gamesRpcEnabled, statusEnabled,
+//      gatewayReady (prevents the daemon from reconnecting on next sync).
+//   3. Disables RpcConfig.enabled and GameRpcConfig.enabled (so the UI shows
+//      "OFF" and the user can't restart RPC while suspended).
+//   4. Audit-logs the automatic shutdown.
+//
+// SAVED RPC CONFIG DATA (name, state, details, buttons, images, etc.) IS
+// PRESERVED — only the `enabled` flags are flipped to false. This implements
+// the workspace retention policy: the workspace is "temporarily preserved"
+// during the grace period and fully restored on renewal.
+//
+// This function is IDEMPOTENT — safe to call multiple times.
+
+async function stopUserRpcServices(userId: string, reason: string): Promise<void> {
+  const now = new Date()
+
+  // 1. Tell the daemon to clear Discord Rich Presence for THIS USER ONLY.
+  //    daemonStopUserRpc calls /stop-rpc?userId=... on the Render daemon,
+  //    which closes the user's gateway socket and clears their Discord
+  //    presence. It does NOT affect any other user.
+  try {
+    await daemonStopUserRpc(userId)
+  } catch (e) {
+    // Non-fatal — the DB flags below still prevent the daemon from pushing.
+    console.error(`stopUserRpcServices: daemonStopUserRpc failed for ${userId}:`, e)
+  }
+
+  // 2. Disable all session RPC flags (scoped to THIS userId only).
+  try {
+    await db.session.updateMany({
+      where: { userId },
+      data: {
+        rpcEnabled: false,
+        gamesRpcEnabled: false,
+        statusEnabled: false,
+        gatewayReady: false,
+        lastPresenceUpdate: now,
+      },
+    })
+  } catch (e) {
+    console.error(`stopUserRpcServices: session update failed for ${userId}:`, e)
+  }
+
+  // 3. Disable RPC config + game RPC config enabled flags (scoped to THIS userId).
+  //    Config DATA is preserved — only the enabled flag is flipped.
+  try {
+    await db.rpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
+    })
+  } catch (e) {
+    console.error(`stopUserRpcServices: rpcConfig update failed for ${userId}:`, e)
+  }
+  try {
+    await db.gameRpcConfig.updateMany({
+      where: { userId },
+      data: { enabled: false },
+    })
+  } catch (e) {
+    console.error(`stopUserRpcServices: gameRpcConfig update failed for ${userId}:`, e)
+  }
+
+  // 4. Audit-log the automatic shutdown.
+  await logAudit('rpc_auto_stopped', userId, { reason, stoppedAt: now.toISOString() })
+  await logAudit('rpc_services_disabled', userId, {
+    reason,
+    rpcEnabled: false,
+    gamesRpcEnabled: false,
+    statusEnabled: false,
+    gatewayReady: false,
+    stoppedAt: now.toISOString(),
+  })
+  await logAudit('game_status_disabled', userId, { reason, stoppedAt: now.toISOString() })
 }
 
 // ---------------------------------------------------------------------------

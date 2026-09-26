@@ -4,17 +4,36 @@ import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { avatarUrl } from '@/lib/discord-oauth'
 import { CONFIG } from '@/lib/config'
-import { getSubscriptionStatus } from '@/lib/subscription'
+import { getSubscriptionStatus, syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const session = await getSession()
-    if (!session) {
+    const initialSession = await getSession()
+    if (!initialSession) {
       // Return 200 with authenticated:false — the dashboard handles this case gracefully
       return NextResponse.json({ authenticated: false })
     }
+
+    // Trigger on-demand subscription lifecycle sync BEFORE reading any RPC data.
+    // This ensures that if the subscription just expired, all RPC services are
+    // stopped and the session/config flags are updated BEFORE we read them.
+    // Without this, the response would show stale RPC flags (e.g. rpcEnabled:true)
+    // even though the backend just disabled them.
+    try {
+      await syncSubscriptionState(initialSession.userId)
+    } catch (e) {
+      console.error('syncSubscriptionState error in /api/me (non-fatal):', e)
+    }
+
+    // Re-fetch the session because syncSubscriptionState may have just updated
+    // the session's rpcEnabled/gamesRpcEnabled/statusEnabled/gatewayReady flags
+    // (if the subscription was just suspended/expired).
+    const session = (await db.session.findFirst({
+      where: { id: initialSession.id },
+      include: { user: true },
+    })) || initialSession
 
     let trial: any = null
     let globalConfig: any = null
