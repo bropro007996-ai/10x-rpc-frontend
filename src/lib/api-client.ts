@@ -149,6 +149,17 @@ export interface AdminUser {
     daysLeft: number
     amountPaid: number
     currency: string
+    suspendedAt: string | null
+    gracePeriodEnd: string | null
+  } | null
+  paymentSummary: {
+    totalSpent: number
+    paymentCount: number
+    lastPaymentDate: string | null
+  }
+  gameRpcConfig: {
+    gameSlug: string
+    enabled: boolean
   } | null
   isAdmin: boolean
 }

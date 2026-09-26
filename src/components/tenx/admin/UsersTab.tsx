@@ -1,4 +1,4 @@
-// 10X RPC — Admin Users tab (upgraded: stats, sort, bulk select, CSV export, subscription info)
+// 10X RPC — Admin Users tab (upgraded: subscription states, payment summary, game RPC, suspend/extend)
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
@@ -7,11 +7,12 @@ import { AdminCard, AdminSectionTitle, AdminEmptyState, AdminErrorState, formatM
 import {
   Search, RefreshCw, Power, Activity, Clock, Trash2, Crown, Gift, Ban,
   CheckCircle2, UserCog, Download, Copy, ChevronDown, Users as UsersIcon,
-  Zap, ShieldCheck, AlertTriangle, X
+  Zap, ShieldCheck, AlertTriangle, X, Gamepad2, Pause, Play, Calendar,
+  IndianRupee, TrendingUp, UserPlus
 } from 'lucide-react'
 
-type FilterType = 'all' | 'active-rpc' | 'verified' | 'no-token' | 'trial' | 'expired' | 'paid' | 'admins'
-type SortType = 'newest' | 'oldest' | 'name' | 'trial-desc' | 'trial-asc'
+type FilterType = 'all' | 'active-rpc' | 'verified' | 'no-token' | 'trial' | 'expired' | 'paid' | 'suspended' | 'admins'
+type SortType = 'newest' | 'oldest' | 'name' | 'trial-desc' | 'trial-asc' | 'spent-desc'
 
 const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -19,8 +20,9 @@ const FILTERS: { id: FilterType; label: string }[] = [
   { id: 'verified', label: 'Verified' },
   { id: 'no-token', label: 'No Token' },
   { id: 'trial', label: 'Trial' },
-  { id: 'expired', label: 'Expired' },
   { id: 'paid', label: 'Paid Sub' },
+  { id: 'suspended', label: 'Suspended' },
+  { id: 'expired', label: 'Expired' },
   { id: 'admins', label: 'Admins' },
 ]
 
@@ -30,7 +32,16 @@ const SORTS: { id: SortType; label: string }[] = [
   { id: 'name', label: 'A→Z' },
   { id: 'trial-desc', label: 'Most Days' },
   { id: 'trial-asc', label: 'Least Days' },
+  { id: 'spent-desc', label: 'Top Spenders' },
 ]
+
+const SUB_STATUS_META: Record<string, { color: string; label: string }> = {
+  active: { color: 'bg-green-500/20 text-green-300', label: 'ACTIVE' },
+  expiring_soon: { color: 'bg-yellow-500/20 text-yellow-300', label: 'EXPIRING' },
+  suspended: { color: 'bg-red-500/20 text-red-300', label: 'SUSPENDED' },
+  expired: { color: 'bg-white/5 text-white/40', label: 'EXPIRED' },
+  cancelled: { color: 'bg-orange-500/20 text-orange-300', label: 'CANCELLED' },
+}
 
 interface UsersTabProps {
   refreshKey: number
@@ -119,17 +130,20 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
 
   const handleExportCsv = () => {
     const rows = [
-      ['Username', 'Discord ID', 'RPC Enabled', 'Verified', 'Trial Days', 'Plan', 'Sub Status', 'Amount Paid', 'Created'],
+      ['Username', 'Discord ID', 'RPC', 'Games RPC', 'Verified', 'Trial Days', 'Plan', 'Sub Status', 'Total Spent', 'Payments', 'Last Payment', 'Created'],
       ...filteredUsers.map(u => [
         u.username,
         u.discordId,
         u.rpc?.rpcEnabled ? 'yes' : 'no',
+        u.rpc?.gamesRpcEnabled ? 'yes' : 'no',
         u.rpc?.hasDiscordToken ? 'yes' : 'no',
         String(u.trial?.daysLeft ?? 0),
         u.subscription?.plan || '',
         u.subscription?.status || '',
-        u.subscription ? formatMoney(u.subscription.amountPaid, u.subscription.currency) : '',
-        new Date(u.createdAt).toISOString(),
+        u.paymentSummary ? formatMoney(u.paymentSummary.totalSpent, 'inr') : '₹0',
+        String(u.paymentSummary?.paymentCount ?? 0),
+        u.paymentSummary?.lastPaymentDate ? new Date(u.paymentSummary.lastPaymentDate).toLocaleDateString() : '',
+        new Date(u.createdAt).toLocaleDateString(),
       ]),
     ]
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -170,7 +184,8 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
         case 'no-token': return u.rpc && !u.rpc.hasDiscordToken
         case 'trial': return u.trial?.active && (u.trial.daysLeft ?? 0) > 0
         case 'expired': return !u.trial?.active || (u.trial.daysLeft ?? 0) === 0
-        case 'paid': return u.subscription?.status === 'active'
+        case 'paid': return u.subscription?.status === 'active' || u.subscription?.status === 'expiring_soon'
+        case 'suspended': return u.subscription?.status === 'suspended'
         case 'admins': return u.isAdmin
         default: return true
       }
@@ -181,6 +196,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
         case 'name': return a.username.localeCompare(b.username)
         case 'trial-desc': return (b.trial?.daysLeft ?? 0) - (a.trial?.daysLeft ?? 0)
         case 'trial-asc': return (a.trial?.daysLeft ?? 0) - (b.trial?.daysLeft ?? 0)
+        case 'spent-desc': return (b.paymentSummary?.totalSpent ?? 0) - (a.paymentSummary?.totalSpent ?? 0)
         default: return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       }
     })
@@ -191,7 +207,14 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
     activeRpc: users.filter(u => u.rpc?.rpcEnabled).length,
     verified: users.filter(u => u.rpc?.hasDiscordToken).length,
     trialActive: users.filter(u => u.trial?.active && (u.trial.daysLeft ?? 0) > 0).length,
-    paidSubs: users.filter(u => u.subscription?.status === 'active').length,
+    paidSubs: users.filter(u => u.subscription?.status === 'active' || u.subscription?.status === 'expiring_soon').length,
+    suspended: users.filter(u => u.subscription?.status === 'suspended').length,
+    totalRevenue: users.reduce((sum, u) => sum + (u.paymentSummary?.totalSpent ?? 0), 0),
+    newToday: users.filter(u => {
+      const created = new Date(u.createdAt)
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      return created > dayAgo
+    }).length,
   }
 
   if (loading) {
@@ -208,26 +231,44 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
   return (
     <div className="space-y-4">
       {/* Stats cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div className="glass-card-inner p-3 text-center">
           <div className="text-lg font-bold text-purple-300">{stats.total}</div>
-          <div className="text-[10px] uppercase tracking-wider text-white/40">Total</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/40">Total Users</div>
         </div>
         <div className="glass-card-inner p-3 text-center">
           <div className="text-lg font-bold text-green-400">{stats.activeRpc}</div>
           <div className="text-[10px] uppercase tracking-wider text-white/40">RPC Live</div>
         </div>
         <div className="glass-card-inner p-3 text-center">
-          <div className="text-lg font-bold text-blue-400">{stats.verified}</div>
-          <div className="text-[10px] uppercase tracking-wider text-white/40">Verified</div>
-        </div>
-        <div className="glass-card-inner p-3 text-center">
-          <div className="text-lg font-bold text-amber-400">{stats.trialActive}</div>
-          <div className="text-[10px] uppercase tracking-wider text-white/40">Trial</div>
-        </div>
-        <div className="glass-card-inner p-3 text-center">
           <div className="text-lg font-bold text-cyan-400">{stats.paidSubs}</div>
-          <div className="text-[10px] uppercase tracking-wider text-white/40">Paid</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/40">Paid Subs</div>
+        </div>
+        <div className="glass-card-inner p-3 text-center">
+          <div className="text-lg font-bold text-amber-400">{stats.suspended}</div>
+          <div className="text-[10px] uppercase tracking-wider text-white/40">Suspended</div>
+        </div>
+      </div>
+
+      {/* Revenue + New Users Row */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="glass-card-inner p-3 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+            <IndianRupee className="w-4 h-4 text-amber-400" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">{formatMoney(stats.totalRevenue)}</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">Total Revenue</div>
+          </div>
+        </div>
+        <div className="glass-card-inner p-3 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+            <UserPlus className="w-4 h-4 text-purple-400" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">{stats.newToday}</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">New (24h)</div>
+          </div>
         </div>
       </div>
 
@@ -265,7 +306,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
           />
         </div>
 
-        {/* Filters + Sort */}
+        {/* Filters */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           {FILTERS.map(f => (
             <button
@@ -280,7 +321,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
           ))}
         </div>
 
-        {/* Sort + Bulk select toggle */}
+        {/* Sort + Bulk select */}
         <div className="flex items-center justify-between mb-3 gap-2">
           <div className="flex items-center gap-1.5">
             <button
@@ -292,10 +333,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
               ☑ Bulk Select
             </button>
             {showBulkActions && filteredUsers.length > 0 && (
-              <button
-                onClick={selectAllFiltered}
-                className="text-[10px] text-purple-300 hover:text-white"
-              >
+              <button onClick={selectAllFiltered} className="text-[10px] text-purple-300 hover:text-white">
                 {selectedIds.size === filteredUsers.length ? 'Deselect all' : 'Select all'}
               </button>
             )}
@@ -324,7 +362,7 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
         {filteredUsers.length === 0 ? (
           <AdminEmptyState icon="👤" title="No users match" hint="Try a different search or filter." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto styled-scroll pr-1">
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto styled-scroll pr-1">
             {filteredUsers.map(u => (
               <UserRow
                 key={u.id}
@@ -386,6 +424,13 @@ export function UsersTab({ refreshKey }: UsersTabProps) {
               {busy ? '...' : 'Grant'}
             </button>
           </div>
+          {/* Quick extend buttons */}
+          <div className="flex gap-1.5 mt-2">
+            <button onClick={() => setGrantDays(7)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+7d</button>
+            <button onClick={() => setGrantDays(30)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+30d</button>
+            <button onClick={() => setGrantDays(90)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+90d</button>
+            <button onClick={() => setGrantDays(365)} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-white/60 hover:text-white">+1yr</button>
+          </div>
         </AdminCard>
       )}
     </div>
@@ -406,17 +451,14 @@ function UserRow({ user, expanded, isGrantTarget, isSelected, showCheckbox, onTo
 }) {
   const rpc = user.rpc
   const sub = user.subscription
+  const pay = user.paymentSummary
+  const gameRpc = user.gameRpcConfig
+  const subMeta = sub ? SUB_STATUS_META[sub.status] || SUB_STATUS_META.expired : null
   return (
     <div className={`glass-card-inner p-3 space-y-2 ${isGrantTarget ? 'border-purple-500/40' : ''} ${isSelected ? 'bg-purple-500/5' : ''}`}>
       <div className="flex items-center gap-3">
-        {/* Checkbox (bulk select mode) */}
         {showCheckbox && (
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onToggleSelect}
-            className="accent-purple-500 w-4 h-4 flex-shrink-0"
-          />
+          <input type="checkbox" checked={isSelected} onChange={onToggleSelect} className="accent-purple-500 w-4 h-4 flex-shrink-0" />
         )}
         <img src={user.avatar} alt={user.username} className="w-10 h-10 rounded-full" onError={(e) => { e.currentTarget.src = '/game-icons/placeholder.png' }} />
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>
@@ -427,8 +469,18 @@ function UserRow({ user, expanded, isGrantTarget, isSelected, showCheckbox, onTo
                 <Crown className="w-2.5 h-2.5" />ADMIN
               </span>
             )}
+            {sub && subMeta && (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${subMeta.color}`}>
+                {subMeta.label}
+              </span>
+            )}
             {sub?.status === 'active' && (
               <span className="bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase">{sub.plan}</span>
+            )}
+            {rpc?.gamesRpcEnabled && (
+              <span className="inline-flex items-center gap-0.5 bg-pink-500/15 text-pink-300 text-[9px] font-semibold px-1.5 py-0.5 rounded-full">
+                <Gamepad2 className="w-2.5 h-2.5" />GAME
+              </span>
             )}
             {isGrantTarget && <span className="bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-full">🎯 TARGET</span>}
             <ChevronDown className={`w-3 h-3 text-white/30 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -452,6 +504,10 @@ function UserRow({ user, expanded, isGrantTarget, isSelected, showCheckbox, onTo
         {rpc?.customStatus && <span>💬 {rpc.customStatusEmoji} {rpc.customStatus}</span>}
         {user.rpcConfig && <span>🎮 {user.rpcConfig.name}</span>}
         {sub?.status === 'active' && <span className="text-cyan-400">💰 {formatMoney(sub.amountPaid, sub.currency)} · {sub.daysLeft}d left</span>}
+        {sub?.status === 'suspended' && sub.gracePeriodEnd && (
+          <span className="text-red-400">⏰ Grace ends: {new Date(sub.gracePeriodEnd).toLocaleDateString()}</span>
+        )}
+        {pay && pay.totalSpent > 0 && <span className="text-amber-400">💳 {formatMoney(pay.totalSpent, 'inr')} ({pay.paymentCount}p)</span>}
         <span className="text-white/30 ml-auto">{timeAgo(user.createdAt)}</span>
       </div>
       {expanded && (
@@ -461,7 +517,11 @@ function UserRow({ user, expanded, isGrantTarget, isSelected, showCheckbox, onTo
             <button onClick={() => onAction('stop-rpc')} disabled={busy} className="inline-flex items-center gap-1 bg-red-500/15 border border-red-500/30 text-red-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-500/25 disabled:opacity-50"><Power className="w-3 h-3" />Stop RPC</button>
             <button onClick={() => onAction('toggle-status', { enable: !rpc?.rpcEnabled })} disabled={busy} className="inline-flex items-center gap-1 bg-blue-500/15 border border-blue-500/30 text-blue-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-blue-500/25 disabled:opacity-50"><Activity className="w-3 h-3" />Toggle Status</button>
             <button onClick={() => onAction('extend-trial', { days: 30 })} disabled={busy} className="inline-flex items-center gap-1 bg-green-500/15 border border-green-500/30 text-green-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-green-500/25 disabled:opacity-50"><Clock className="w-3 h-3" />+30d Trial</button>
-            <button onClick={() => onAction('ban')} disabled={busy} className="inline-flex items-center gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-orange-500/25 disabled:opacity-50"><Ban className="w-3 h-3" />Ban</button>
+            {sub?.status === 'suspended' ? (
+              <button onClick={() => onAction('unban')} disabled={busy} className="inline-flex items-center gap-1 bg-green-500/15 border border-green-500/30 text-green-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-green-500/25 disabled:opacity-50"><Play className="w-3 h-3" />Unsuspend</button>
+            ) : (
+              <button onClick={() => onAction('ban')} disabled={busy} className="inline-flex items-center gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-200 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-orange-500/25 disabled:opacity-50"><Pause className="w-3 h-3" />Suspend</button>
+            )}
             <button onClick={onCopyId} disabled={busy} className="inline-flex items-center gap-1 bg-white/5 border border-white/10 text-white/70 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white disabled:opacity-50"><Copy className="w-3 h-3" />Copy ID</button>
             <button onClick={() => { if (confirm(`Delete ${user.username}? This cannot be undone.`)) onAction('delete-user') }} disabled={busy} className="inline-flex items-center gap-1 bg-red-500/10 border border-red-500/20 text-red-300/80 text-[10px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-500/20 disabled:opacity-50"><Trash2 className="w-3 h-3" />Delete</button>
           </div>
@@ -470,7 +530,12 @@ function UserRow({ user, expanded, isGrantTarget, isSelected, showCheckbox, onTo
             <div>ID: {user.id.slice(0, 16)}...</div>
             <div>Created: {new Date(user.createdAt).toLocaleDateString()}</div>
             {rpc && <><div>Gateway: {rpc.gatewayReady ? '✓' : '✗'}</div><div>VR: {rpc.vrStatusActive ? '✓' : '✗'}</div></>}
+            {gameRpc && <><div>Game: {gameRpc.gameSlug}</div><div>Game RPC: {gameRpc.enabled ? 'ON' : 'OFF'}</div></>}
             {sub && <><div>Sub Plan: {sub.plan}</div><div>Sub Ends: {new Date(sub.endsAt).toLocaleDateString()}</div></>}
+            {sub?.suspendedAt && <div>Suspended: {new Date(sub.suspendedAt).toLocaleDateString()}</div>}
+            {sub?.gracePeriodEnd && <div>Grace End: {new Date(sub.gracePeriodEnd).toLocaleDateString()}</div>}
+            {pay && pay.paymentCount > 0 && <><div>Total Spent: {formatMoney(pay.totalSpent, 'inr')}</div><div>Payments: {pay.paymentCount}</div></>}
+            {pay?.lastPaymentDate && <div>Last Pay: {new Date(pay.lastPaymentDate).toLocaleDateString()}</div>}
             {user.globalConfig && <><div>City: {user.globalConfig.city || '—'}</div><div>TZ: {user.globalConfig.timezone}</div></>}
           </div>
         </div>
