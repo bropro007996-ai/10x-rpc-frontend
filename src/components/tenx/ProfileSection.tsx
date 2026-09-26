@@ -7,7 +7,7 @@ import { EmojiPicker } from './EmojiPicker'
 import { useRouter } from './useRouter'
 import { Card, PurpleSwitch, Badge } from './ui'
 import { DISCORD_STATUSES } from '@/lib/constants'
-import { Crown, Zap, Wifi, WifiOff, Gamepad2, Globe, Monitor, Smartphone } from 'lucide-react'
+import { Crown, Zap, Wifi, WifiOff, Monitor, Smartphone } from 'lucide-react'
 import { DiscordPreview } from './DiscordPreview'
 
 function VrIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -24,8 +24,6 @@ function VrIcon({ className = 'w-4 h-4' }: { className?: string }) {
 const PLATFORM_ITEMS = [
   { value: 'mobile', label: 'Mobile', icon: Smartphone },
   { value: 'desktop', label: 'Desktop', icon: Monitor },
-  { value: 'console', label: 'Console', icon: Gamepad2 },
-  { value: 'web', label: 'Web', icon: Globe },
   { value: 'meta_quest', label: 'VR', icon: VrIcon },
 ]
 
