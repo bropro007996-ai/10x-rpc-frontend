@@ -6,6 +6,7 @@ import { exchangeCode, fetchDiscordUser, avatarUrl } from '@/lib/discord-oauth'
 import { CONFIG } from '@/lib/config'
 import { db } from '@/lib/db'
 import { setSessionCookie } from '@/lib/session'
+import { syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +93,18 @@ export async function GET(req: Request) {
           discordTokenExpiresAt: new Date(Date.now() + (tokens.expires_in || 604800) * 1000),
         },
       })
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Run syncSubscriptionState on login — ensures any expired subscription
+    // is immediately detected and suspended, so the user sees the Suspended
+    // Page on their very next dashboard load (not the normal dashboard).
+    // This also stops any RPC services that were left running.
+    // ─────────────────────────────────────────────────────────────────────
+    try {
+      await syncSubscriptionState(user.id)
+    } catch (e) {
+      console.error('syncSubscriptionState error on login (non-fatal):', e)
     }
 
     // Redirect through Vercel's /set-session route so the session cookie is

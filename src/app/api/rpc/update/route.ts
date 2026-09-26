@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { daemonSyncUser } from '@/lib/daemon-bridge'
+import { checkFeatureAccess } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -17,11 +18,11 @@ export async function POST() {
       )
     }
 
-    // Check trial
-    const trial = await db.trial.findUnique({ where: { userId: session.userId } })
-    if (!trial || !trial.active || trial.endsAt < new Date()) {
+    // BLOCK RPC updates for suspended/expired users (on-demand expiry detection).
+    const access = await checkFeatureAccess(session.userId)
+    if (!access.allowed) {
       return NextResponse.json(
-        { ok: false, error: 'trial_expired', message: 'Your 3-day trial has expired.' },
+        { ok: false, error: 'subscription_suspended', message: access.reason },
         { status: 403 }
       )
     }

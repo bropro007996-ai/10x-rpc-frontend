@@ -1,14 +1,16 @@
 // 10X RPC — /api/rpc/keep-alive — 24/7 presence refresh for ALL active users
 // Called by cron / self-ping every 5 minutes.
 // For each user with rpcEnabled=true:
-//   1. Refresh Discord token if expired
-//   2. Re-send presence via Gaming SDK gateway
-//   3. Re-apply custom status + user status via REST
-//   4. Refresh VR status if active
+//   1. Run syncSubscriptionState() — suspends expired users + stops their RPC
+//   2. Refresh Discord token if expired
+//   3. Re-send presence via Gaming SDK gateway
+//   4. Re-apply custom status + user status via REST
+//   5. Refresh VR status if active
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { applyPresence } from '@/lib/rpc-manager'
 import { resolvePlaceholders } from '@/lib/placeholders'
+import { syncSubscriptionState } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for multiple gateway connections
@@ -26,7 +28,32 @@ export async function POST(req: Request) {
   const now = new Date()
   const results: Array<{ userId: string; username: string; ok: boolean; message: string }> = []
 
+  // ─────────────────────────────────────────────────────────────────────
+  // CRITICAL: Before pushing RPC for any user, run syncSubscriptionState
+  // for ALL users with active sessions. This ensures expired subscriptions
+  // are suspended BEFORE their RPC is pushed — so the keep-alive cron
+  // never accidentally keeps a suspended user's RPC alive.
+  // This is account-isolated — each sync only affects that one user.
+  // ─────────────────────────────────────────────────────────────────────
+  const allActiveUserIds = await db.session.findMany({
+    where: {
+      rpcEnabled: true,
+      discordAccessToken: { not: null },
+      expiresAt: { gt: now },
+    },
+    select: { userId: true },
+    distinct: ['userId'],
+  })
+  for (const { userId } of allActiveUserIds) {
+    try {
+      await syncSubscriptionState(userId)
+    } catch (e) {
+      console.error(`keep-alive: syncSubscriptionState failed for ${userId}:`, e)
+    }
+  }
+
   // Find all sessions with RPC enabled AND a Discord access token
+  // (after sync, suspended users will have rpcEnabled=false, so they're excluded)
   const activeSessions = await db.session.findMany({
     where: {
       rpcEnabled: true,

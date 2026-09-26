@@ -217,10 +217,16 @@ export async function syncSubscriptionState(userId: string): Promise<void> {
   }
 
   // ------------------------------------------------------------------
-  // CASE B: active/expiring_soon but endsAt has passed → SUSPEND.
+  // CASE B: active/expiring_soon/cancelled but endsAt has passed → SUSPEND.
   // This is the real-time detection that runs on every protected request.
+  // Handles ALL three "active-access" statuses that can expire:
+  //   - active → user has a running subscription that just expired
+  //   - expiring_soon → user was in the warning window, now expired
+  //   - cancelled → user cancelled but had access until endsAt, now expired
+  // Without this, a cancelled subscription would NEVER be suspended and the
+  // user would retain access indefinitely after the endsAt timestamp.
   // ------------------------------------------------------------------
-  if ((sub.status === 'active' || sub.status === 'expiring_soon') && sub.endsAt <= now) {
+  if ((sub.status === 'active' || sub.status === 'expiring_soon' || sub.status === 'cancelled') && sub.endsAt <= now) {
     const gracePeriodEnd = new Date(sub.endsAt.getTime() + GRACE_PERIOD_MS)
     await db.subscription.update({
       where: { id: sub.id },

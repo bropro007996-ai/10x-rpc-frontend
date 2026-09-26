@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { db } from '@/lib/db'
 import { ensureDaemonRunning } from '@/lib/rpc-daemon'
+import { checkFeatureAccess } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,15 @@ export async function POST(req: Request) {
   try {
     const session = await getSession()
     if (!session) return NextResponse.json({ error: 'not_authenticated' }, { status: 401 })
+
+    // BLOCK VR status for suspended/expired users.
+    const access = await checkFeatureAccess(session.userId)
+    if (!access.allowed) {
+      return NextResponse.json(
+        { ok: false, error: 'subscription_suspended', message: access.reason },
+        { status: 403 }
+      )
+    }
 
     const body = await req.json() as { active?: boolean }
     const active = !!body.active
