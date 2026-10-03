@@ -64,25 +64,27 @@ export function parseImage(image: string | null | undefined): string | null {
   }
 
   if (isHttpUrl) {
-    // For Discord CDN URLs: STRIP query strings + fragments before conversion.
-    // Discord CDN signed URLs (?ex=...&is=...&hm=...) expire and break the media proxy.
-    // The base path (e.g. emojis/123.gif) is publicly accessible without signatures.
-    let cleanPath = trimmed
-    const qIdx = cleanPath.indexOf('?')
-    if (qIdx >= 0) cleanPath = cleanPath.substring(0, qIdx)
-    const hIdx = cleanPath.indexOf('#')
-    if (hIdx >= 0) cleanPath = cleanPath.substring(0, hIdx)
+    const host = (() => { try { return new URL(trimmed).hostname.toLowerCase() } catch { return '' } })()
 
-    // Convert Discord CDN URLs to `mp:` prefix (preserves .gif extension in path)
-    let converted = cleanPath
-      .replace('https://cdn.discordapp.com/', 'mp:')
-      .replace('http://cdn.discordapp.com/', 'mp:')
-      .replace('https://media.discordapp.net/', 'mp:')
-      .replace('http://media.discordapp.net/', 'mp:')
+    // Discord CDN URLs → mp: prefix
+    // CRITICAL: KEEP the FULL URL including query params!
+    //   - Attachment URLs (cdn.discordapp.com/attachments/...) REQUIRE signed
+    //     params (?ex=...&is=...&hm=...) for authentication. Stripping them
+    //     makes the image inaccessible → shows a broken/question mark placeholder.
+    //   - Emoji URLs (cdn.discordapp.com/emojis/...) and app-asset URLs
+    //     (cdn.discordapp.com/app-assets/...) are public and work with or
+    //     without params, but keeping params is harmless.
+    //   - The .gif extension is preserved in the path → animated GIFs render.
+    if (host === 'cdn.discordapp.com' || host === 'media.discordapp.net') {
+      const converted = trimmed
+        .replace('https://cdn.discordapp.com/', 'mp:')
+        .replace('http://cdn.discordapp.com/', 'mp:')
+        .replace('https://media.discordapp.net/', 'mp:')
+        .replace('http://media.discordapp.net/', 'mp:')
 
-    if (converted.startsWith('mp:')) {
-      // Discord CDN URL successfully converted — .gif extension preserved in path
-      return converted
+      if (converted.startsWith('mp:')) {
+        return converted
+      }
     }
 
     // Arbitrary HTTPS URL (Giphy, Imgur, Tenor, etc.) — encode as
@@ -104,14 +106,9 @@ export function parseImage(image: string | null | undefined): string | null {
     return trimmed
   }
 
-  // Already-prefixed values — pass through (strip query strings for mp: paths)
+  // Already-prefixed values — pass through (KEEP query strings for mp: paths)
   if (['mp:', 'youtube:', 'spotify:', 'twitch:'].some((v) => trimmed.startsWith(v))) {
-    let clean = trimmed
-    const qIdx = clean.indexOf('?')
-    if (qIdx >= 0) clean = clean.substring(0, qIdx)
-    const hIdx = clean.indexOf('#')
-    if (hIdx >= 0) clean = clean.substring(0, hIdx)
-    return clean
+    return trimmed
   }
 
   // `external/...` path → prefix with `mp:`
