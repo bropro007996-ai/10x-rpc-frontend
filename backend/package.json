@@ -1,0 +1,20 @@
+{
+  "name": "10x-rpc-backend",
+  "version": "1.0.0",
+  "description": "10X RPC — 24/7 Backend Daemon (Discord Gateway presence + HTTP API)",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "dev": "node --import tsx --watch src/index.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "prisma": "^6.11.1",
+    "@types/ws": "^8.5.10",
+    "@types/node": "^20.11.0"
+  }
+}

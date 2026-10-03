@@ -1,0 +1,24 @@
+// 10X RPC — /api/rpc/clear — clear custom status via 24/7 Gateway
+import { NextResponse } from 'next/server'
+import { getSession } from '@/lib/session'
+import { db } from '@/lib/db'
+import { daemonForcePush } from '@/lib/daemon-bridge'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 30
+
+export async function POST() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'not_authenticated' }, { status: 401 })
+
+  await db.session.update({
+    where: { id: session.id },
+    data: { customStatus: null, customStatusEmoji: null },
+  })
+
+  if (session.discordAccessToken) {
+    await daemonForcePush(session.userId)
+  }
+
+  return NextResponse.json({ ok: true, message: 'Custom status cleared' })
+}
