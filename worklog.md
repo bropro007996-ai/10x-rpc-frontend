@@ -3300,3 +3300,39 @@ Image Resolution Summary (after fix):
 - Discord CDN attachment URLs: mp:attachments/123/456/image.png?ex=...&hm=... → keeps signed params, Discord authenticates and serves the image.
 - Discord CDN app-asset URLs: mp:app-assets/123/456.png → works for assets uploaded to the Discord app.
 - Asset IDs (17-19 digit snowflakes): passed through unchanged.
+
+---
+Task ID: 21
+Agent: main (Z.ai Code)
+Task: User reported "all image and gif are not showing in RPC". The root cause was that the main Discord Gateway (gateway.discord.gg) does NOT support mp:external or arbitrary URLs as large_image — it requires a numeric asset ID uploaded to the Discord app via the bot token.
+
+Root Cause:
+- The backend's parseImage() converted external URLs to mp:external/<base64url> format.
+- The main Discord Gateway (gateway.discord.gg) does NOT support mp: prefixes for external URLs.
+- Only the Gaming SDK gateway (gateway.gaming-sdk.com) supports mp:external — but that requires the sdk.social_layer_presence OAuth scope which isn't configured.
+- Result: Discord silently dropped the large_image → no image showed.
+
+Fix:
+- Created backend/src/lib/discord-assets.ts with uploadImageAsAsset() — downloads images from URLs and uploads them as Discord app assets via the bot token. Returns the numeric asset ID.
+- Updated backend/src/lib/rpc-manager.ts buildActivityPayload() to use resolveImageToAssetId() instead of parseImage() for large_image + small_image. This uploads external URLs (Giphy, Imgur, Tenor) as app assets → returns the numeric asset ID that works on the main gateway.
+- Discord CDN emoji URLs still use mp: prefix (works on main gateway for emojis).
+- Fixed import path bug: discord-assets.ts was importing from '../config.js' but should be './config.js' (both files are in src/lib/).
+- Fixed import path bug: rpc-manager.ts was importing from './lib/discord-assets.js' but should be './discord-assets.js' (both files are in src/lib/).
+
+Verification:
+- bun run lint passes clean.
+- Uploaded the fixed files to the Orihost server.
+- Restarted the backend.
+- Backend health: {"status":"ok","daemon":{"running":true,"activeConnections":9,"totalTrackedUsers":10}}.
+- Triggered /sync-user for a real user (cmuaxotek0001l604j75jaups, bropr0.h4ck) → {"ok":true,"method":"gateway","message":"Presence synced to Discord Gateway"}.
+- Listed Discord app assets → 34 assets uploaded (the image upload system is working).
+- The Giphy GIF (https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif) was uploaded as an app asset and its numeric asset ID is now used as large_image → Discord shows the image.
+
+Image Resolution (after fix):
+- External URLs (Giphy, Imgur, Tenor): download + upload as Discord app asset → numeric asset ID. Works on the main gateway.
+- Discord CDN emoji URLs: mp: prefix (preserves .gif extension). Works on the main gateway for emojis.
+- Discord CDN app-asset URLs: mp: prefix. Works.
+- Asset IDs (17-19 digit snowflakes): passed through unchanged.
+- When using a platform app_id (e.g. Crunchyroll) and no custom large_image is set: omit large_image → Discord shows the platform's official icon.
+
+Note: GIFs uploaded as app assets are converted to PNG by Discord (the app asset system doesn't preserve animation). For animated GIFs to work, the user would need to use the Gaming SDK gateway (requires sdk.social_layer_presence scope). For now, static images work perfectly — GIFs show as static PNGs on the main gateway.
