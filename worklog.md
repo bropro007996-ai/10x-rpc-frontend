@@ -3256,3 +3256,47 @@ Stage Summary:
 - The OAuth flow works on both the new deployment and www.10xrpc.shop (both redirect to the registered https://www.10xrpc.shop/auth/discord/callback)
 - The Orihost backend is running and healthy (8 active Discord Gateway connections)
 - For automatic deployments on git push: the user needs to connect the GitHub repo to the Vercel project in the Vercel dashboard (Settings → Git → Connect Git Repository)
+
+---
+Task ID: 20
+Agent: main (Z.ai Code)
+Task: User reported "rpc image and gif is not showing fix the error and all bugs". The backend's parseImage() was stripping query params from Discord CDN URLs, which broke attachment URLs (they require signed params for authentication).
+
+Root Cause:
+- The backend's parseImage() in rpc-manager.ts was stripping query strings (?ex=...&is=...&hm=...) from ALL Discord CDN URLs before converting them to mp: prefix.
+- Attachment URLs (cdn.discordapp.com/attachments/...) REQUIRE these signed query params for authentication. Stripping them → Discord can't fetch the image → shows a broken/question mark placeholder.
+- The frontend's resolveImageToAssetId() (discord-assets.ts) was already fixed in Task 18 to keep query params, but the backend's parseImage() was NOT fixed.
+- Since BACKEND_URL is set, the BACKEND is what actually sends the OP 3 to Discord. The frontend just calls the backend's HTTP endpoints. So the backend's parseImage() is the one that matters.
+
+Fixes Applied:
+1. backend/src/rpc-manager.ts parseImage(): rewrote to KEEP the full URL including query params for Discord CDN URLs. Now matches the frontend's resolveImageToAssetId() behavior:
+   - Discord CDN URLs → mp: prefix (keeps full URL including signed params + .gif extension)
+   - External URLs → mp:external/<base64url-of-full-url> (preserves GIF animation via media proxy)
+   - Asset IDs → pass through
+   - Already-prefixed values → pass through (no stripping)
+
+2. src/lib/rpc-manager.ts parseImage(): same fix applied to the frontend's parseImage() for consistency. Was stripping query params from emoji/app-asset URLs (harmless but inconsistent). Now keeps the full URL for all Discord CDN URLs, matching the backend.
+
+Deployment:
+- Uploaded the fixed rpc-manager.ts to the Orihost backend via Pterodactyl API.
+- Restarted the backend server (waited ~90s for npm install + prisma generate).
+- Backend is healthy: {"status":"ok","daemon":{"running":true}}.
+- Pushed the fix to GitHub (commit 1c93089).
+- Redeployed to Vercel (https://my-project-eosin-one-88.vercel.app).
+
+Verification:
+- bun run lint passes clean.
+- Tested image resolution via /api/rpc/parse-image-test:
+  - Giphy GIF URL → mp:external/<base64url> ✅ (preserves GIF animation)
+  - Discord CDN emoji GIF → mp:emojis/1234567890.gif ✅ (preserves .gif extension)
+  - Discord CDN attachment with signed params → mp:attachments/123/456/image.png?ex=123&is=456&hm=abc ✅ (KEEPS signed params)
+  - External HTTPS URL → mp:external/<base64url> ✅
+- Backend deployed + restarted with the fix.
+- Vercel deployment is live with the fix.
+
+Image Resolution Summary (after fix):
+- External URLs (Giphy, Imgur, Tenor): mp:external/<base64url-of-full-url> → Discord's media proxy fetches the image, preserves the content-type (GIFs stay animated).
+- Discord CDN emoji URLs: mp:emojis/123.gif → preserves .gif extension, animation works.
+- Discord CDN attachment URLs: mp:attachments/123/456/image.png?ex=...&hm=... → keeps signed params, Discord authenticates and serves the image.
+- Discord CDN app-asset URLs: mp:app-assets/123/456.png → works for assets uploaded to the Discord app.
+- Asset IDs (17-19 digit snowflakes): passed through unchanged.
