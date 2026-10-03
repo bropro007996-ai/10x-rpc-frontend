@@ -3212,3 +3212,47 @@ Stage Summary:
 - The "Application ID (Optional)" field is now available in the Rich Presence form. Users can enter any Discord Application ID (17-20 digits) to spoof that app's official icon.
 - The image/GIF bug is fixed: external URLs now use mp:external/<base64url> which preserves GIF animation through Discord's media proxy.
 - The changes are deployed to both the frontend (sandbox) and the Orihost backend.
+
+---
+Task ID: 19
+Agent: main (Z.ai Code)
+Task: User provided GitHub + Vercel tokens + Discord credentials + Orihost API key. Push the frontend code to GitHub and deploy to Vercel with all environment variables configured.
+
+Work Log:
+- Pushed the frontend code to GitHub (bropro007996-ai/10x-rpc-frontend). Had to create a fresh orphan branch to remove secrets from git history (the backend/README.md contained the Neon DATABASE_URL, Discord client secret, and bot token — GitHub's secret scanning blocked the push). Added worklog.md and upload/ to .gitignore to prevent future secret leaks.
+- Deployed to Vercel via `vercel --prod --yes` with the VERCEL_TOKEN. The project was linked as "my-project" (prj_BxOX3Cx042biIt2A8mrtWZDNklY5).
+- Set all production environment variables on the Vercel project:
+    DATABASE_URL (Neon Postgres pooler)
+    DATABASE_URL_UNPOOLED (Neon Postgres direct)
+    DISCORD_CLIENT_ID (1549299168562905148)
+    DISCORD_CLIENT_SECRET
+    DISCORD_BOT_TOKEN
+    DISCORD_OAUTH_SCOPE (identify guilds.join)
+    DISCORD_SERVER_ID (1540998891971805185)
+    DISCORD_INVITE_URL
+    SESSION_SECRET
+    BACKEND_URL (http://194.62.248.55:30189)
+    BACKEND_SECRET (10x-rpc-backend-secret-2024)
+- Redeployed after setting env vars. The deployment is live at https://my-project-eosin-one-88.vercel.app.
+- Added the /api/auth/redirect-uri endpoint (was missing from the initial push). On Vercel, it returns the production redirect URI (https://www.10xrpc.shop/auth/discord/callback) since CONFIG.discord.redirectUri is hardcoded to the production domain.
+- Tried to connect Git for automatic deployments (vercel git connect) but it failed because the GitHub account needs a Login Connection configured on Vercel. The user can do this manually in the Vercel dashboard.
+
+Verification:
+- bun run lint passes clean.
+- GitHub repo: https://github.com/bropro007996-ai/10x-rpc-frontend (2 commits pushed)
+- Vercel deployment: https://my-project-eosin-one-88.vercel.app
+    GET /api/auth/config → {"oauthAvailable":true,"demoAvailable":true,"appName":"10X RPC"}
+    GET /api/me → {"authenticated":false}
+    GET / → HTTP 200 (landing page)
+    GET /auth/discord → 307 redirect to Discord authorize URL with client_id=1549299168562905148
+- Production domain: https://www.10xrpc.shop (existing deployment, also working)
+- Backend: http://194.62.248.55:30189 (uptime 1221s, daemon running, 8 active connections)
+- OAuth redirect URI: https://www.10xrpc.shop/auth/discord/callback (already registered in Discord Developer Portal)
+
+Stage Summary:
+- Frontend code is on GitHub: https://github.com/bropro007996-ai/10x-rpc-frontend
+- Vercel deployment is live: https://my-project-eosin-one-88.vercel.app
+- All environment variables are configured on Vercel (DATABASE_URL, Discord creds, BACKEND_URL, etc.)
+- The OAuth flow works on both the new deployment and www.10xrpc.shop (both redirect to the registered https://www.10xrpc.shop/auth/discord/callback)
+- The Orihost backend is running and healthy (8 active Discord Gateway connections)
+- For automatic deployments on git push: the user needs to connect the GitHub repo to the Vercel project in the Vercel dashboard (Settings → Git → Connect Git Repository)
