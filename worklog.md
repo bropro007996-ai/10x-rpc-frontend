@@ -3336,3 +3336,35 @@ Image Resolution (after fix):
 - When using a platform app_id (e.g. Crunchyroll) and no custom large_image is set: omit large_image → Discord shows the platform's official icon.
 
 Note: GIFs uploaded as app assets are converted to PNG by Discord (the app asset system doesn't preserve animation). For animated GIFs to work, the user would need to use the Gaming SDK gateway (requires sdk.social_layer_presence scope). For now, static images work perfectly — GIFs show as static PNGs on the main gateway.
+
+---
+Task ID: 22
+Agent: main (Z.ai Code)
+Task: User reported "rpc gif not running" — GIFs were showing as static images because the main Discord Gateway converts uploaded app assets to PNG (strips animation). Fixed by switching to the Gaming SDK gateway which supports mp: prefixes for animated GIFs.
+
+Root Cause:
+- In Task 21, I switched to uploading images as Discord app assets (uploadImageAsAsset). This works on the main gateway (gateway.discord.gg) BUT the app asset system converts GIFs to PNG — animation is lost.
+- The Gaming SDK gateway (gateway.gaming-sdk.com) supports mp: prefixes (mp:emojis/, mp:external/<base64url>) which preserve GIF animation through Discord's media proxy. But it requires the sdk.social_layer_presence OAuth scope.
+
+Fix:
+- Backend .env: changed DISCORD_GATEWAY_URL from wss://gateway.discord.gg to wss://gateway.gaming-sdk.com
+- Backend .env: changed DISCORD_OAUTH_SCOPE to include sdk.social_layer_presence
+- Backend rpc-manager.ts: reverted buildActivityPayload to use parseImage() (mp: prefix) instead of resolveImageToAssetId (upload as asset). The Gaming SDK gateway supports mp: prefixes for animated GIFs.
+- Frontend config.ts: changed default gatewayUrl to wss://gateway.gaming-sdk.com and default scope to 'identify guilds.join sdk.social_layer_presence'
+- Frontend .env: restored Neon Postgres + Gaming SDK config
+- Vercel: updated DISCORD_OAUTH_SCOPE env var to include sdk.social_layer_presence
+- Redeployed to Vercel.
+
+Verification:
+- bun run lint passes clean.
+- Backend health: {"status":"ok","daemon":{"running":true,"activeConnections":9}}.
+- Sync for real user (cmuaxotek0001l604j75jaups): {"ok":true,"method":"gateway","message":"Presence synced to Discord Gateway"}.
+- GitHub pushed (commit a02b5be).
+- Vercel redeployed with the new scope + gateway URL.
+
+How GIFs work now:
+- External GIF URLs (Giphy, Imgur, Tenor): parseImage() converts to mp:external/<base64url-of-full-url>. The Gaming SDK gateway's media proxy fetches the image and preserves the content-type → GIFs stay animated.
+- Discord CDN emoji GIFs: parseImage() converts to mp:emojis/123.gif. The .gif extension is preserved → animation works.
+- Discord CDN attachment URLs: parseImage() converts to mp:attachments/123/456/image.png?ex=...&hm=... (keeps signed params).
+
+Note: Users who logged in BEFORE the scope change have tokens WITHOUT sdk.social_layer_presence. They need to re-authorize (log out + log back in) to get a new token with the updated scope. The backend's token refresh logic will NOT add the new scope automatically — Discord requires re-authorization for scope changes.
