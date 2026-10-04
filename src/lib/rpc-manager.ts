@@ -11,7 +11,8 @@ import { resolveRpcActivityName, getPlatformAppId } from './constants'
 import { parseImageUrl as parseImage, isHttpUrl } from './image-utils'
 
 // Re-export for backwards compatibility (other modules import these)
-export { isHttpUrl, parseImageUrl } from './image-utils'
+export { isHttpUrl, parseImageUrl }
+export { parseImage }
 import { resolveImageToAssetId } from './discord-assets'
 
 /**
