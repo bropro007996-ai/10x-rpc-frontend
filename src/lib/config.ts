@@ -13,14 +13,14 @@ export const CONFIG = {
     // OAuth scope — identify + guilds.join (works with the main gateway).
     // Note: sdk.social_layer_presence is NOT needed when using the main gateway
     // + uploading images as app assets.
-    scope: process.env.DISCORD_OAUTH_SCOPE || 'identify guilds.join sdk.social_layer_presence',
+    scope: process.env.DISCORD_OAUTH_SCOPE || 'identify guilds.join',
     authorizeUrl: 'https://discord.com/api/oauth2/authorize',
     tokenUrl: 'https://discord.com/api/oauth2/token',
     apiBase: 'https://discord.com/api/v9',
     // Main Discord gateway — works with all user OAuth tokens.
     // Images are uploaded as Discord app assets (via bot token) and the
     // numeric asset ID is used as large_image (works on the main gateway).
-    gatewayUrl: process.env.DISCORD_GATEWAY_URL || 'wss://gateway.gaming-sdk.com/?v=10&encoding=json',
+    gatewayUrl: process.env.DISCORD_GATEWAY_URL || 'wss://gateway.discord.gg/?v=10&encoding=json',
     serverId: process.env.DISCORD_SERVER_ID || '1549302358926823496',
     inviteUrl: process.env.DISCORD_INVITE_URL || 'https://discord.gg/jr27qeCZU',
   },

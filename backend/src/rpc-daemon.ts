@@ -580,12 +580,12 @@ export class RpcDaemon {
         const timeout = setTimeout(() => {
           if (!resolved) {
             resolved = true
-            console.warn(`[10X RPC Daemon] Connection timeout for user ${userId} (12s). Cleaning up.`)
+            console.warn(`[10X RPC Daemon] Connection timeout for user ${userId} (30s). Cleaning up.`)
             this.cleanupSocket(userSock)
             userSock.isConnecting = false
-            resolve({ ok: false, message: 'Gateway connection timeout (12s)' })
+            resolve({ ok: false, message: 'Gateway connection timeout (30s)' })
           }
-        }, 12000)
+        }, 30000)
 
         const ws = new WebSocket(CONFIG.discord.gatewayUrl)
         userSock.ws = ws
