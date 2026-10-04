@@ -10,14 +10,16 @@ export const CONFIG = {
     // OAuth callback (exchanges code, creates session). Hardcoded to prevent stale
     // env vars from pointing to the wrong URL.
     redirectUri: 'https://www.10xrpc.shop/auth/discord/callback',
-    // Gaming SDK scope — required for the Gaming SDK gateway connection.
-    scope: process.env.DISCORD_OAUTH_SCOPE || 'openid identify sdk.social_layer_presence',
+    // OAuth scope — includes sdk.social_layer_presence so the Gaming SDK
+    // gateway accepts connections and supports mp: prefixes for animated GIFs.
+    scope: process.env.DISCORD_OAUTH_SCOPE || 'identify guilds.join sdk.social_layer_presence',
     authorizeUrl: 'https://discord.com/api/oauth2/authorize',
     tokenUrl: 'https://discord.com/api/oauth2/token',
     apiBase: 'https://discord.com/api/v9',
-    // Main Discord gateway — supports app assets (large_image) for user OAuth tokens.
-    // The Gaming SDK gateway (gateway.gaming-sdk.com) does NOT support custom images.
-    gatewayUrl: process.env.DISCORD_GATEWAY_URL || 'wss://gateway.discord.gg/?v=10&encoding=json',
+    // Gaming SDK gateway — supports mp: prefixes (mp:emojis/, mp:external/)
+    // for animated GIFs. The main gateway (gateway.discord.gg) does NOT
+    // support mp: prefixes for external URLs.
+    gatewayUrl: process.env.DISCORD_GATEWAY_URL || 'wss://gateway.gaming-sdk.com/?v=10&encoding=json',
     serverId: process.env.DISCORD_SERVER_ID || '1549302358926823496',
     inviteUrl: process.env.DISCORD_INVITE_URL || 'https://discord.gg/jr27qeCZU',
   },

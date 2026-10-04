@@ -8,7 +8,6 @@ import type { RpcConfig } from './api-client'
 import type { PlaceholderContext } from './placeholders'
 import { resolvePlaceholders } from './placeholders'
 import { resolveRpcActivityName, getPlatformAppId } from './constants'
-import { resolveImageToAssetId } from './discord-assets.js'
 
 /**
  * Parse an image reference into Discord's expected `large_image` / `small_image` format.
@@ -246,20 +245,21 @@ export async function buildActivityPayload(
     activity.party = party
   }
 
-  // Assets (images) — upload as Discord app assets via resolveImageToAssetId.
-  // The main Discord Gateway (gateway.discord.gg) does NOT support mp:external
-  // or arbitrary URLs as large_image. It requires a numeric asset ID that was
-  // uploaded to the Discord app via the bot token.
+  // Assets (images) — use parseImage() which produces mp: prefixes.
+  // The Gaming SDK gateway (gateway.gaming-sdk.com) supports mp: prefixes
+  // for Discord CDN URLs AND mp:external/<base64url> for external URLs.
+  // This PRESERVES GIF animation (the media proxy fetches the image with
+  // the correct content-type).
   //
   // When using an application_id override (e.g. Crunchyroll) and the user
   // hasn't set a custom large_image, we OMIT large_image entirely — Discord
   // then displays the platform's official icon via the application_id.
   const assets: Record<string, string> = {}
-  const largeImg = cfg.largeImage ? await resolveImageToAssetId(cfg.largeImage) : ''
+  const largeImg = cfg.largeImage ? parseImage(cfg.largeImage) : ''
   if (largeImg) assets.large_image = largeImg
   if (cfg.largeText) assets.large_text = cfg.largeText
   else if (applicationIdOverride) assets.large_text = activityName
-  const smallImg = await resolveImageToAssetId(cfg.smallImage)
+  const smallImg = parseImage(cfg.smallImage)
   if (smallImg) assets.small_image = smallImg
   if (cfg.smallText) assets.small_text = cfg.smallText
   if (Object.keys(assets).length > 0) activity.assets = assets
@@ -372,19 +372,21 @@ export async function buildGameActivityPayload(
     activity.party = party
   }
 
-  // Assets — upload as Discord app assets via resolveImageToAssetId.
-  // For spoofed games (application_id = game's app_id), if no custom image is provided,
-  // OMIT large_image entirely — Discord shows the game's official icon via application_id.
-  // If a custom image IS provided, upload it as an app asset → numeric asset ID.
+  // Assets — use parseImage() which produces mp: prefixes.
+  // The Gaming SDK gateway supports mp: prefixes for Discord CDN URLs
+  // and mp:external/<base64url> for external URLs (preserves GIF animation).
+  // For spoofed games (application_id = game's app_id), if no custom image
+  // is provided, OMIT large_image entirely — Discord shows the game's
+  // official icon via application_id.
   const assets: Record<string, string> = {}
   if (cfg.largeImage) {
-    const largeKey = await resolveImageToAssetId(cfg.largeImage)
+    const largeKey = parseImage(cfg.largeImage)
     if (largeKey) assets.large_image = largeKey
   }
   if (cfg.largeText) assets.large_text = cfg.largeText
   else if (cfg.name) assets.large_text = cfg.name
   if (cfg.smallImage) {
-    const smallKey = await resolveImageToAssetId(cfg.smallImage)
+    const smallKey = parseImage(cfg.smallImage)
     if (smallKey) assets.small_image = smallKey
   }
   if (cfg.smallText) assets.small_text = cfg.smallText
