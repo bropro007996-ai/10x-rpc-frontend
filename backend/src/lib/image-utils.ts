@@ -1,26 +1,21 @@
-// 10X RPC — Unified image URL parser (backend version with asset upload)
+// 10X RPC — Unified image URL parser (backend, Gaming SDK gateway version)
 //
-// This is the BACKEND version. It uses a HYBRID approach:
-//   - Discord CDN emoji URLs → mp: prefix (preserves .gif, works on main gateway)
-//   - Discord CDN app-asset URLs → mp: prefix (works on main gateway)
-//   - Everything else (external URLs, Discord attachments) → upload as Discord
-//     app asset via the bot token → returns numeric asset ID that works on
-//     the main gateway.
+// This version uses mp: prefixes for ALL URLs because the Gaming SDK gateway
+// (gateway.gaming-sdk.com) supports mp: prefixes for both Discord CDN URLs
+// AND external URLs. This PRESERVES GIF animation (the media proxy fetches
+// the image with the correct content-type).
 //
-// Note: GIFs uploaded as app assets are converted to PNG (animation lost).
-// For animated GIFs, users should use Discord CDN emoji URLs (mp:emojis/123.gif).
-
-import { CONFIG } from './config.js'
-import { uploadImageAsAsset } from './discord-assets.js'
-
-// In-memory cache: URL → resolved large_image value (avoids re-uploading)
-const resolveCache = new Map<string, string | null>()
+// Priority:
+// 1. Discord CDN URLs → mp: prefix (preserves .gif + signed query params)
+// 2. External HTTPS URLs → mp:external/<base64url-of-FULL-url>
+//    (media proxy fetches + preserves content-type → GIFs stay animated)
+// 3. Asset IDs / mp: prefixes → pass through
+// 4. Invalid input → null (graceful, no throw)
 
 /**
  * Parse an image reference into Discord's expected `large_image` format.
  *
- * SYNC version — used for already-prefixed values, asset IDs, and Discord CDN
- * emoji/app-asset URLs. Returns null for external URLs (use parseImageUrlAsync).
+ * This is a SYNC function (no upload needed — mp:external/ is computed locally).
  */
 export function parseImageUrl(image: string | null | undefined): string | null {
   if (image == null) return null
@@ -28,7 +23,7 @@ export function parseImageUrl(image: string | null | undefined): string | null {
   const trimmed = image.trim()
   if (!trimmed) return null
 
-  // Already-prefixed values → pass through
+  // Already-prefixed values → pass through (KEEP query strings)
   if (
     trimmed.startsWith('mp:') ||
     trimmed.startsWith('youtube:') ||
@@ -58,101 +53,70 @@ export function parseImageUrl(image: string | null | undefined): string | null {
     parsedUrl = null
   }
 
+  // Not a URL → treat as a Discord asset key, pass through
   if (!parsedUrl) {
-    // Not a URL → treat as asset key, pass through
     return trimmed
   }
 
+  // Only http and https are supported
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
     return null
   }
 
   const host = parsedUrl.hostname.toLowerCase()
-  const path = parsedUrl.pathname
 
-  // Discord CDN emoji URLs → mp: prefix (preserves .gif, works on main gateway)
-  // These are PUBLIC assets — the mp: prefix works for emojis on the main gateway.
-  if ((host === 'cdn.discordapp.com' || host === 'media.discordapp.net') && path.includes('/emojis/')) {
+  // ── Discord CDN URLs → mp: prefix (HIGHEST PRIORITY — MUST WORK) ────
+  //
+  // cdn.discordapp.com — emojis, app-icons, app-assets, attachments, banners
+  // media.discordapp.net — alternate CDN for the same assets
+  //
+  // CRITICAL: Keep the FULL URL including query params!
+  //   - Attachment URLs REQUIRE signed params (?ex=...&is=...&hm=...) for auth
+  //   - Emoji URLs work with or without params (params are harmless)
+  //   - App-asset URLs work with or without params
+  //   - The .gif extension in the path → animated GIFs render correctly
+  if (host === 'cdn.discordapp.com' || host === 'media.discordapp.net') {
     const converted = trimmed
       .replace('https://cdn.discordapp.com/', 'mp:')
       .replace('http://cdn.discordapp.com/', 'mp:')
       .replace('https://media.discordapp.net/', 'mp:')
       .replace('http://media.discordapp.net/', 'mp:')
-    if (converted.startsWith('mp:')) return converted
+    if (converted.startsWith('mp:')) {
+      return converted
+    }
   }
 
-  // Discord CDN app-asset URLs → mp: prefix (works on main gateway)
-  if ((host === 'cdn.discordapp.com' || host === 'media.discordapp.net') && path.includes('/app-assets/')) {
-    const converted = trimmed
-      .replace('https://cdn.discordapp.com/', 'mp:')
-      .replace('http://cdn.discordapp.com/', 'mp:')
-      .replace('https://media.discordapp.net/', 'mp:')
-      .replace('http://media.discordapp.net/', 'mp:')
-    if (converted.startsWith('mp:')) return converted
+  // ── External HTTPS URL → mp:external/<base64url-of-FULL-url> ────────
+  //
+  // This handles ALL other valid image/GIF sources:
+  //   - Image-hosting services (Giphy, Imgur, Tenor, etc.)
+  //   - Other CDNs (Cloudflare, AWS S3, Akamai, etc.)
+  //   - Website-hosted images
+  //   - Direct GIF/PNG/JPG/JPEG/WEBP/AVIF URLs
+  //   - URLs without a visible file extension
+  //   - URLs with query parameters, cache-busting params, URL-encoded chars
+  //   - URLs that redirect (Discord's proxy follows 3xx redirects)
+  //
+  // The Gaming SDK gateway's media proxy:
+  //   - Fetches the image from the external URL (follows redirects)
+  //   - Determines the content-type from the response headers
+  //   - Serves it through Discord's CDN
+  //   - PRESERVES the content-type (GIFs stay animated!)
+  try {
+    const b64 = Buffer.from(trimmed).toString('base64url')
+    return `mp:external/${b64}`
+  } catch {
+    return null
   }
-
-  // Discord CDN app-icon URLs → mp: prefix (works on main gateway)
-  if ((host === 'cdn.discordapp.com' || host === 'media.discordapp.net') && path.includes('/app-icons/')) {
-    const converted = trimmed
-      .replace('https://cdn.discordapp.com/', 'mp:')
-      .replace('http://cdn.discordapp.com/', 'mp:')
-      .replace('https://media.discordapp.net/', 'mp:')
-      .replace('http://media.discordapp.net/', 'mp:')
-    if (converted.startsWith('mp:')) return converted
-  }
-
-  // For EVERYTHING ELSE (external URLs, Discord attachments, etc.):
-  // Return null — the caller should use parseImageUrlAsync() which uploads
-  // as an app asset and returns the numeric asset ID.
-  return null
 }
 
 /**
- * ASYNC version — resolves external URLs by uploading as Discord app assets.
- *
- * Priority:
- * 1. Discord CDN emoji/app-asset/app-icon URLs → mp: prefix (sync, works on main gateway)
- * 2. External URLs (Giphy, Imgur, etc.) → upload as app asset → numeric asset ID
- * 3. Discord CDN attachment URLs → upload as app asset → numeric asset ID (attachments need auth)
- * 4. Asset IDs, mp: prefixes → pass through
- * 5. Invalid input → null (graceful)
+ * ASYNC version — for backwards compatibility with rpc-manager.ts.
+ * Since we're using the Gaming SDK gateway, this just calls the sync version.
+ * No asset upload needed — mp:external/ is computed locally and preserves GIFs.
  */
 export async function parseImageUrlAsync(image: string | null | undefined): Promise<string | null> {
-  if (image == null) return null
-  if (typeof image !== 'string') return null
-  const trimmed = image.trim()
-  if (!trimmed) return null
-
-  // Check cache first
-  const cached = resolveCache.get(trimmed)
-  if (cached !== undefined) return cached
-
-  // Try the sync version first (handles mp: prefixes, asset IDs, Discord CDN emojis)
-  const syncResult = parseImageUrl(trimmed)
-  if (syncResult !== null) {
-    resolveCache.set(trimmed, syncResult)
-    return syncResult
-  }
-
-  // If sync returned null, it's an external URL or Discord attachment.
-  // Upload as a Discord app asset → returns numeric asset ID.
-  if (!CONFIG.discord.botToken || !CONFIG.discord.clientId) {
-    resolveCache.set(trimmed, null)
-    return null
-  }
-
-  try {
-    const asset = await uploadImageAsAsset(trimmed)
-    if (asset) {
-      resolveCache.set(trimmed, asset.assetId)
-      return asset.assetId
-    }
-  } catch (e) {
-    console.error('[parseImageUrlAsync] Upload failed:', e)
-  }
-
-  resolveCache.set(trimmed, null)
-  return null
+  return parseImageUrl(image)
 }
 
 export function isHttpUrl(s: string | null | undefined): boolean {
