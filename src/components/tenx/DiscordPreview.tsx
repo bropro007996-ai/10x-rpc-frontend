@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { RpcConfig } from '@/lib/api-client'
 import { resolveRpcActivityName } from '@/lib/constants'
+import { isHttpUrl } from '@/lib/image-utils'
 
 interface PreviewProps {
   config: RpcConfig | null | undefined
@@ -146,7 +147,7 @@ export function DiscordPreview({ config, username, avatarUrl, platform, rpcEnabl
             {/* Large image */}
             <div className="relative shrink-0">
               {largeImage ? (
-                isUrl(largeImage) ? (
+                isHttpUrl(largeImage) ? (
                   <img
                     src={largeImage}
                     alt={largeText}
@@ -170,7 +171,7 @@ export function DiscordPreview({ config, username, avatarUrl, platform, rpcEnabl
               {/* Small image overlay */}
               {smallImage && (
                 <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-[#121319] overflow-hidden bg-[#1c1d25] flex items-center justify-center text-[10px]">
-                  {isUrl(smallImage) ? (
+                  {isHttpUrl(smallImage) ? (
                     <img src={smallImage} alt={smallText} title={smallText} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                   ) : (
                     <span title={smallText}>⭐</span>
@@ -264,9 +265,8 @@ function PlatformBadge({ platform }: { platform: string }) {
   )
 }
 
-function isUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s)
-}
+// Note: isUrl() was replaced by isHttpUrl() from @/lib/image-utils
+// (handles URL parsing more robustly with try/catch + URL.canParse)
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000)
