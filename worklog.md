@@ -3500,3 +3500,40 @@ Image Resolution Summary (after fix):
 - External GIF URLs (Giphy, Imgur, Tenor) → mp:external/<base64url> (media proxy preserves content-type → animated)
 - External image URLs → mp:external/<base64url> (works)
 - Asset IDs → pass through (works)
+
+---
+Task ID: 26
+Agent: main (Z.ai Code)
+Task: User reported "rpc image not showing, gif also not playing" — the Gaming SDK gateway was connecting but did NOT support mp: image prefixes. Fixed by switching to the main gateway with a longer timeout.
+
+Root Cause:
+1. The Gaming SDK gateway (gateway.gaming-sdk.com) connected successfully (9 active connections) but does NOT support mp: prefixed images → images didn't show at all.
+2. The main gateway (gateway.discord.gg) supports ALL image formats (mp: prefix, mp:external/, asset IDs) but was timing out at 12 seconds from the Orihost server (which is in Germany — the connection to Discord's US servers takes >12s).
+
+Fix:
+1. Increased the daemon connection timeout from 12 seconds to 30 seconds — the main gateway now connects successfully from Orihost (9 active connections confirmed).
+2. Switched the backend .env back to the main gateway: DISCORD_GATEWAY_URL=wss://gateway.discord.gg/?v=10&encoding=json
+3. Updated frontend config.ts to match: main gateway + identify guilds.join scope (no need for sdk.social_layer_presence on the main gateway)
+4. The main gateway supports ALL image formats:
+   - Discord CDN emoji URLs → mp:emojis/123.gif (preserves .gif → animated)
+   - Discord CDN attachment URLs → mp:attachments/.../image.png?ex=...&hm=... (keeps signed params)
+   - External GIF URLs (Giphy, Imgur, Tenor) → mp:external/<base64url> (media proxy preserves content-type → animated)
+   - External image URLs → mp:external/<base64url> (works)
+   - Numeric asset IDs → pass through (works)
+
+Verification:
+- bun run lint passes clean.
+- Backend health: {"status":"ok","daemon":{"running":true,"activeConnections":9}} — 9 active connections on the main gateway.
+- Sync for real user (cmuaxotek0001l604j75jaups): {"ok":true,"method":"gateway","message":"Presence synced to Discord Gateway"}.
+- The user's Giphy GIF (https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif) is now encoded as mp:external/<base64url> → the main gateway's media proxy fetches it with the correct content-type → GIF animation is preserved.
+- The user's Discord attachment URL (https://cdn.discordapp.com/attachments/.../image.png?ex=...&hm=...) is now encoded as mp:attachments/.../image.png?ex=...&hm=... → the signed params are preserved → Discord can authenticate and serve the image.
+- GitHub pushed (commit 3e8ac90).
+- Vercel redeployed.
+
+Stage Summary:
+- The root cause was TWO issues working together:
+  1. Gaming SDK gateway: connects but doesn't support mp: images
+  2. Main gateway: supports mp: images but was timing out at 12s
+- The fix was simple: increase the timeout to 30s + switch to the main gateway.
+- The main gateway supports ALL image formats (mp: prefix, mp:external/, asset IDs) and preserves GIF animation through the media proxy.
+- All images (Discord CDN + external) and GIFs should now show on Discord.
